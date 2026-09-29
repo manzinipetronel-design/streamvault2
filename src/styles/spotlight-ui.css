@@ -1,0 +1,923 @@
+/*
+ * Ported verbatim (same values, same behavior) from the approved HTML
+ * preview, so the real app matches it exactly instead of being a
+ * hand-translated Tailwind approximation. Reuses the app's existing design
+ * tokens (--void, --glass-border, etc. from tailwind.css) rather than
+ * redefining them. Every class is prefixed `sv-` to avoid collisions with
+ * anything else in the app.
+ */
+
+:root {
+  --sv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- Nav rail: individual floating glass circles ---------- */
+.sv-rail {
+  position: fixed;
+  left: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+.sv-rail-grid {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.2s var(--sv-ease), transform 0.3s var(--sv-ease);
+}
+.sv-rail-grid span {
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.3s var(--sv-ease);
+}
+.sv-rail-grid:hover {
+  color: #fff;
+  transform: scale(1.1);
+}
+.sv-rail-grid:hover span:nth-child(1) {
+  transform: translate(-1px, -1px);
+}
+.sv-rail-grid:hover span:nth-child(4) {
+  transform: translate(1px, 1px);
+}
+.sv-rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.sv-rail-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 20px rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+.sv-rail-item svg {
+  width: 18px;
+  height: 18px;
+}
+.sv-rail-item.sv-active {
+  background: var(--foreground);
+  color: var(--void);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+.sv-rail-item:hover:not(.sv-active) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: scale(1.05);
+}
+.sv-rail-item:active {
+  transform: scale(0.94);
+}
+.sv-rail-item:focus-visible,
+.sv-rail-grid:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* ---------- Shared glass surface (search bar, filter/action buttons) ---------- */
+.sv-glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 20px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.18s ease, background 0.18s ease;
+  /* backdrop-filter doesn't reliably clip to border-radius in every
+     browser on its own — forcing overflow:hidden here guarantees the pill
+     and circle shapes always render with clean rounded corners instead of
+     occasionally painting as a squared-off rectangle. */
+  overflow: hidden;
+}
+.sv-glass:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.sv-search-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: var(--muted);
+  width: 200px;
+}
+.sv-search-pill svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.sv-search-pill span {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sv-icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+}
+.sv-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+.sv-icon-btn.sv-on {
+  background: var(--foreground);
+  color: var(--void);
+}
+
+/* ---------- Hero ---------- */
+.sv-hero {
+  position: relative;
+  width: 100%;
+  min-height: 640px;
+  overflow: hidden;
+  background: var(--void);
+}
+.sv-hero-fade-x {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(13, 13, 13, 0.95) 0%,
+    rgba(13, 13, 13, 0.55) 50%,
+    rgba(13, 13, 13, 0.15) 78%,
+    transparent 100%
+  );
+  z-index: 1;
+}
+@media (min-width: 768px) {
+  .sv-hero-fade-x {
+    background: linear-gradient(
+      90deg,
+      rgba(13, 13, 13, 0.96) 0%,
+      rgba(13, 13, 13, 0.55) 24%,
+      rgba(13, 13, 13, 0.15) 40%,
+      transparent 58%
+    );
+  }
+}
+.sv-hero-fade-y {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    0deg,
+    rgba(13, 13, 13, 0.9) 0%,
+    rgba(13, 13, 13, 0.4) 16%,
+    rgba(13, 13, 13, 0.1) 32%,
+    transparent 46%
+  );
+  z-index: 1;
+}
+
+.sv-hero-fg {
+  position: relative;
+  z-index: 5;
+  min-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+.sv-hero-content-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 90px 24px 24px 20px;
+}
+@media (min-width: 768px) {
+  .sv-hero-content-wrap {
+    padding-left: 112px;
+    padding-right: 48px;
+  }
+}
+.sv-hero-content {
+  max-width: 620px;
+}
+.sv-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.sv-hero-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--muted-2);
+}
+.sv-hero-title {
+  font-size: clamp(2.2rem, 5vw, 4.2rem);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.sv-hero-sub {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-bottom: 28px;
+  max-width: 440px;
+  line-height: 1.6;
+}
+.sv-hero-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 26px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13.5px;
+  transition: transform 0.25s var(--sv-ease), background 0.25s var(--sv-ease), border-color 0.25s var(--sv-ease),
+    box-shadow 0.25s var(--sv-ease);
+}
+/* Smaller variant for compact contexts (e.g. the Movies/Series featured
+   banner) — the full-size button above was sized for Home's much taller
+   hero and reads oversized in a 300-360px banner. */
+.sv-btn.sv-btn-sm {
+  padding: 9px 18px;
+  font-size: 12px;
+  gap: 6px;
+}
+.sv-btn.sv-btn-sm svg {
+  width: 10px;
+  height: 10px;
+}
+.sv-btn svg {
+  width: 13px;
+  height: 13px;
+}
+.sv-btn-primary {
+  background: var(--foreground);
+  color: var(--void);
+}
+.sv-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -8px rgba(255, 255, 255, 0.25);
+}
+.sv-btn-primary:active {
+  transform: translateY(0) scale(0.97);
+}
+.sv-btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  color: var(--foreground);
+}
+.sv-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+.sv-btn-ghost:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.sv-hero-footer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px 96px;
+}
+@media (min-width: 640px) {
+  .sv-hero-footer {
+    padding-bottom: 32px;
+  }
+}
+@media (min-width: 768px) {
+  .sv-hero-footer {
+    padding-left: 112px;
+    padding-right: 48px;
+  }
+}
+.sv-hero-strip-col {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .sv-hero-strip-col {
+    display: flex;
+  }
+}
+.sv-hero-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.sv-strip-card {
+  flex: none;
+  width: 50px;
+  height: 74px;
+  border-radius: 7px;
+  overflow: hidden;
+  opacity: 0.55;
+  transition: all 0.3s var(--sv-ease);
+  position: relative;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.sv-strip-card:hover:not(.sv-active) {
+  opacity: 0.85;
+  transform: translateY(-3px);
+}
+.sv-strip-card.sv-active {
+  width: 64px;
+  height: 92px;
+  opacity: 1;
+  outline: 2px solid var(--foreground);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+.sv-hero-dots {
+  display: flex;
+  gap: 6px;
+}
+.sv-hero-dots span {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  width: 10px;
+  transition: all 0.3s;
+}
+.sv-hero-dots span.sv-active {
+  width: 20px;
+  background: var(--foreground);
+}
+.sv-hero-actions {
+  flex: none;
+  display: flex;
+  gap: 10px;
+}
+.sv-icon-btn:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04));
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 12px 22px rgba(0, 0, 0, 0.45);
+}
+.sv-icon-btn:active {
+  transform: translateY(0) scale(0.94);
+}
+.sv-icon-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ---------- Rows ---------- */
+.sv-row-head a {
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 0.2s var(--sv-ease);
+}
+.sv-row-head a:hover {
+  color: var(--foreground);
+}
+.sv-poster {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.3s var(--sv-ease), box-shadow 0.3s var(--sv-ease);
+}
+.sv-poster::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.9) 100%);
+  opacity: 0;
+  transition: opacity 0.3s var(--sv-ease);
+}
+.sv-card:hover .sv-poster {
+  transform: translateY(-6px) scale(1.035);
+  box-shadow: 0 20px 38px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.sv-card:hover .sv-poster::after {
+  opacity: 1;
+}
+.sv-rank {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(13, 13, 13, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+}
+.sv-poster-info {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 2;
+  padding: 10px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s var(--sv-ease), transform 0.3s var(--sv-ease);
+}
+.sv-card:hover .sv-poster-info {
+  opacity: 1;
+  transform: translateY(0);
+}
+.sv-poster-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.sv-poster-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.sv-poster-meta .sv-rating {
+  color: var(--gold);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.sv-poster-meta svg {
+  width: 9px;
+  height: 9px;
+  fill: var(--gold);
+}
+
+/* ---------- Search page — ported verbatim from the approved preview ---------- */
+.sv-page {
+  padding: 100px 20px 60px;
+}
+@media (min-width: 768px) {
+  .sv-page {
+    padding: 56px 40px 60px 112px;
+  }
+}
+.sv-page-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.sv-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.sv-page-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+@media (min-width: 768px) {
+  .sv-page-title {
+    font-size: 38px;
+  }
+}
+
+.sv-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  margin-bottom: 28px;
+  position: relative;
+}
+.sv-search-pill.sv-inline {
+  flex: 1;
+  width: auto;
+  height: 46px;
+}
+.sv-search-pill input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.sv-search-pill input::placeholder {
+  color: var(--muted);
+}
+.sv-icon-btn.sv-inline {
+  width: 46px;
+  height: 46px;
+}
+
+.sv-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  border-radius: 16px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  animation: sv-drop-in 0.18s var(--sv-ease);
+}
+@keyframes sv-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.sv-filter-option {
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+.sv-filter-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--foreground);
+}
+.sv-filter-option.sv-active {
+  background: var(--foreground);
+  color: var(--void);
+}
+
+.sv-results-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+.sv-results-meta b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.sv-type-badge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(13, 13, 13, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sv-empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- Movies / Series catalog pages — ported verbatim from preview ---------- */
+.sv-page-sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+.sv-page-head.sv-catalog {
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.sv-chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 36px;
+  scrollbar-width: none;
+}
+.sv-chip-row::-webkit-scrollbar {
+  display: none;
+}
+.sv-chip {
+  flex: none;
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.2s var(--sv-ease);
+}
+.sv-chip.sv-active {
+  background: var(--foreground);
+  color: var(--void);
+}
+.sv-chip:not(.sv-active):hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--foreground);
+}
+
+/* ---------- Compact featured banner (Movies/Series) ---------- */
+.sv-featured {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--void-2);
+  margin-bottom: 36px;
+}
+@media (min-width: 768px) {
+  .sv-featured {
+    height: 360px;
+  }
+}
+.sv-featured-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.sv-featured-media img {
+  object-fit: cover;
+}
+.sv-featured-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+      90deg,
+      rgba(13, 13, 13, 0.97) 0%,
+      rgba(13, 13, 13, 0.6) 32%,
+      rgba(13, 13, 13, 0.15) 55%,
+      transparent 78%
+    ),
+    linear-gradient(0deg, rgba(13, 13, 13, 0.85) 0%, transparent 45%);
+}
+.sv-featured-body {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px;
+  max-width: 560px;
+}
+@media (min-width: 768px) {
+  .sv-featured-body {
+    padding: 32px 40px;
+  }
+}
+.sv-featured-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.sv-featured-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  margin-bottom: 8px;
+}
+@media (min-width: 768px) {
+  .sv-featured-title {
+    font-size: 34px;
+  }
+}
+.sv-featured-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.sv-featured-overview {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- Featured banner poster-strip switcher (mirrors the Home hero's
+   strip, scaled down for the compact banner) ---------- */
+.sv-featured-strip {
+  display: none;
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 3;
+  align-items: flex-end;
+  gap: 8px;
+}
+@media (min-width: 640px) {
+  .sv-featured-strip {
+    display: flex;
+  }
+}
+@media (min-width: 768px) {
+  .sv-featured-strip {
+    right: 40px;
+    bottom: 32px;
+  }
+}
+.sv-featured-thumb {
+  flex: none;
+  width: 34px;
+  height: 50px;
+  border-radius: 6px;
+  overflow: hidden;
+  opacity: 0.55;
+  position: relative;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s var(--sv-ease);
+}
+.sv-featured-thumb:hover:not(.sv-active) {
+  opacity: 0.85;
+  transform: translateY(-2px);
+}
+.sv-featured-thumb.sv-active {
+  width: 44px;
+  height: 64px;
+  opacity: 1;
+  outline: 2px solid var(--foreground);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Lists page — ported verbatim from the approved preview ---------- */
+.sv-clear-btn {
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.2s var(--sv-ease);
+}
+.sv-clear-btn:hover {
+  color: var(--foreground);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sv-badge-topleft {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(13, 13, 13, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sv-rating-badge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(13, 13, 13, 0.7);
+  border: 1px solid rgba(245, 185, 66, 0.35);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--gold);
+}
+.sv-rating-badge svg {
+  width: 9px;
+  height: 9px;
+  fill: var(--gold);
+}
+
+.sv-remove-btn {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 13, 13, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  opacity: 0;
+  transition: all 0.2s var(--sv-ease);
+}
+.sv-card:hover .sv-remove-btn {
+  opacity: 1;
+}
+.sv-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+  color: #fff;
+  border-color: transparent;
+}
+.sv-remove-btn svg {
+  width: 11px;
+  height: 11px;
+}
+.sv-remove-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.sv-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+.sv-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+}
+
+.sv-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 90px 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.sv-empty-card .sv-empty-icon {
+  font-size: 40px;
+  margin-bottom: 14px;
+}
+.sv-empty-card h3 {
+  font-family: 'Unbounded', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.sv-empty-card p {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 340px;
+}

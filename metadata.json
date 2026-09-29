@@ -1,0 +1,6 @@
+{
+  "name": "Stream",
+  "description": "Personal entertainment guide for movies, TV shows, and series with real-time curated recommendations, watchlists, and player streams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

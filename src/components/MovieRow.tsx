@@ -1,0 +1,187 @@
+'use client';
+
+import React, { useRef } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+
+interface Movie {
+  id: number;
+  title?: string;
+  name?: string;
+  overview: string;
+  backdrop_path?: string;
+  poster_path?: string;
+  vote_average?: number;
+  release_date?: string;
+  first_air_date?: string;
+}
+
+interface MovieRowProps {
+  title: string;
+  items: Movie[];
+  isMock?: boolean;
+  /** 'movie' (default) or 'tv' — determines whether cards link to
+   *  /media/movie/{id} or /media/tv/{id}. TMDB movie and TV ids are
+   *  separate sequences that can collide, so getting this wrong sends
+   *  people to a completely unrelated title. */
+  mediaType?: 'movie' | 'tv';
+  /** Show a bold rank number (1, 2, 3…) in the corner — reserve this for
+   *  genuinely ranked rows like "Trending now", not every row in the app. */
+  showRank?: boolean;
+  spotlightStyles?: boolean;
+  /** Where "View all" goes — e.g. /browse/catalog?genre=28&name=Action.
+   *  Defaults to /browse when a row has no natural drill-down target. */
+  viewAllHref?: string;
+}
+
+export default function MovieRow({
+  title,
+  items,
+  isMock,
+  mediaType = 'movie',
+  showRank,
+  spotlightStyles = false,
+  viewAllHref = '/browse',
+}: MovieRowProps) {
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  const getImageUrl = (movie: Movie) => {
+    if (isMock && movie.poster_path) return movie.poster_path;
+    if (movie.poster_path) return `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+    return 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&q=80&w=600&h=900'; // Fallback
+  };
+
+  const scrollRow = (direction: number) => {
+    if (rowRef.current) {
+      const scrollAmount = rowRef.current.clientWidth * 0.8;
+      rowRef.current.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div className="group/row flex flex-col pt-9 pb-1 relative">
+      <div className={`flex items-baseline justify-between mb-5 px-4 md:px-0${spotlightStyles ? ' sv-row-head' : ''}`}>
+        <h3 className="font-display text-lg md:text-xl font-semibold text-foreground tracking-tight">
+          {title}
+        </h3>
+        <Link href={viewAllHref} className="link-sweep text-[13px]">
+          View all
+        </Link>
+      </div>
+
+      <div className="relative">
+        {/* glass scroll buttons — fade in on row hover, not always visible */}
+        <button
+          onClick={() => scrollRow(-1)}
+          aria-label="Scroll left"
+          className="absolute top-1/2 -translate-y-1/2 -left-2 w-9 h-9 rounded-full bg-void-2/70 backdrop-blur-md border border-glass-border flex items-center justify-center text-foreground opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 hover:border-violet z-10"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className="w-[15px] h-[15px]"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+
+        <div
+          ref={rowRef}
+          className="movie-row spotlight-scope flex gap-[14px] overflow-x-auto pb-1 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {items.map((movie, i) => {
+            const releaseYear = (movie.release_date || movie.first_air_date || '2026').split(
+              '-'
+            )[0];
+            const cleanRating = movie.vote_average ? movie.vote_average.toFixed(1) : '7.0';
+
+            return (
+              <Link
+                key={movie.id}
+                href={`/media/${mediaType}/${movie.id}`}
+                prefetch={false}
+                className={`movie-card group flex-none w-[125px] sm:w-[150px] md:w-[172px] snap-start relative rounded-[8px]${spotlightStyles ? ' sv-card' : ''}`}
+              >
+                {/* Lift + violet glow on hover, on the OUTER wrapper — kept
+                    separate from the inner overflow-hidden poster box below,
+                    since a translateY/scale here needs room to breathe
+                    without clipping against the poster's own rounded
+                    corners/overflow-hidden. This replaces the old
+                    "dark gradient wash over the whole poster" treatment: the
+                    artwork now stays fully bright at rest AND on hover —
+                    only the card's shadow and a slim bottom strip change. */}
+                <div
+                  className={
+                    spotlightStyles
+                      ? 'sv-poster'
+                      : 'relative aspect-[2/3] w-full rounded-[8px] transition-transform duration-300 ease-out group-hover:-translate-y-1.5 group-hover:scale-[1.03] group-hover:shadow-[0_20px_36px_-10px_rgba(123,47,255,0.5)]'
+                  }
+                >
+                  <div className="relative w-full h-full overflow-hidden rounded-[8px] ring-0 ring-violet group-hover:ring-2 transition-[box-shadow] duration-300">
+                    <Image
+                      src={getImageUrl(movie)}
+                      alt={movie.title || movie.name || 'Media Poster'}
+                      fill
+                      sizes="(max-width: 640px) 130px, (max-width: 1024px) 172px, 172px"
+                      className="object-cover rounded-[8px]"
+                    />
+
+                    {showRank && (
+                      <div className="absolute top-2 left-2 flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-md bg-void/70 backdrop-blur-md border border-white/10 font-display font-extrabold text-[12px] text-foreground z-20">
+                        {i + 1}
+                      </div>
+                    )}
+
+                    {/* Info strip — sits off-canvas below the poster's own
+                        bottom edge (translate-y-full) and slides up to rest
+                        on hover, instead of a wash darkening the art itself.
+                        overflow-hidden on the parent clips it out of view
+                        at rest. */}
+                    <div
+                      className={
+                        spotlightStyles
+                          ? 'sv-poster-info'
+                          : 'absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out bg-void/75 backdrop-blur-md border-t border-white/10 px-3 py-2.5'
+                      }
+                    >
+                      <p className={spotlightStyles ? 'sv-poster-title' : 'font-display font-semibold text-[12.5px] leading-tight text-foreground line-clamp-2'}>
+                        {movie.title || movie.name}
+                      </p>
+                      <div className={spotlightStyles ? 'sv-poster-meta' : 'flex items-center gap-2 text-[11px] text-muted mt-1'}>
+                        <span className={spotlightStyles ? 'sv-rating' : 'flex items-center gap-[3px] text-gold font-semibold'}>
+                          <svg viewBox="0 0 24 24" className="w-[9px] h-[9px] fill-gold">
+                            <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z" />
+                          </svg>
+                          {cleanRating}
+                        </span>
+                        <span>{releaseYear}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => scrollRow(1)}
+          aria-label="Scroll right"
+          className="absolute top-1/2 -translate-y-1/2 -right-2 w-9 h-9 rounded-full bg-void-2/70 backdrop-blur-md border border-glass-border flex items-center justify-center text-foreground opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 hover:border-violet z-10"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className="w-[15px] h-[15px]"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}

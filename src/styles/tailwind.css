@@ -1,0 +1,773 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --void: #0d0d0d;
+  --void-2: #111111;
+  --void-3: #161616;
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-hover: rgba(255, 255, 255, 0.1);
+  --violet: #7b2fff;
+  --violet-light: #a366ff;
+  --violet-dim: rgba(123, 47, 255, 0.15);
+  --magenta: #d946ef;
+  --gold: #f5b942;
+  --cyan: #00e5ff;
+  --cyan-dim: rgba(0, 229, 255, 0.15);
+  --foreground: #f0f0f0;
+  --muted: rgba(240, 240, 240, 0.45);
+  --muted-strong: rgba(240, 240, 240, 0.65);
+  --muted-2: rgba(240, 240, 240, 0.25);
+  --glow-violet: 0 0 40px rgba(123, 47, 255, 0.35);
+  --glow-cyan: 0 0 40px rgba(0, 229, 255, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--void);
+  color: var(--foreground);
+  font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grain overlay */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  background-image: url('https://grainy-gradients.vercel.app/noise.svg');
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Glass card */
+.glass-card {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+}
+
+.glass-card-sm {
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+}
+
+/* Violet-cyan gradient border */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Typewriter cursor */
+.typewriter-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background: var(--cyan);
+  margin-left: 4px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Phone mockup */
+.phone-frame {
+  position: relative;
+  width: 280px;
+  height: 580px;
+  background: #0a0a0a;
+  border-radius: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(123, 47, 255, 0.3),
+    0 40px 120px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.phone-frame::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  z-index: 10;
+}
+
+/* Floating arch images */
+.arch-card {
+  position: absolute;
+  width: 120px;
+  height: 160px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(123, 47, 255, 0.3);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(123, 47, 255, 0.15);
+  transition:
+    transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.3s ease;
+  cursor: pointer;
+}
+
+.arch-card:hover {
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.7),
+    0 0 30px rgba(0, 229, 255, 0.25);
+  z-index: 50;
+}
+
+/* Content cards */
+.content-card {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+  cursor: pointer;
+}
+
+.content-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: rgba(123, 47, 255, 0.4);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(123, 47, 255, 0.2);
+}
+
+.content-card:hover .card-glow {
+  opacity: 1;
+}
+
+.card-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(123, 47, 255, 0.1), rgba(0, 229, 255, 0.05));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+/* Fan card stack */
+.fan-card {
+  position: absolute;
+  width: 200px;
+  height: 280px;
+  border-radius: 20px;
+  overflow: hidden;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+/* Filter chip */
+.filter-chip {
+  padding: 8px 20px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.filter-chip:hover {
+  border-color: rgba(123, 47, 255, 0.5);
+  color: var(--foreground);
+  background: var(--violet-dim);
+}
+
+.filter-chip.active {
+  border-color: var(--violet);
+  background: var(--violet-dim);
+  color: var(--foreground);
+  box-shadow: 0 0 20px rgba(123, 47, 255, 0.3);
+}
+
+/* Live counter pulse */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4);
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.9;
+    box-shadow: 0 0 0 6px rgba(0, 229, 255, 0);
+  }
+}
+
+/* Sticky download bar */
+.sticky-download-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(13, 13, 13, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(123, 47, 255, 0.3);
+  padding: 16px 24px;
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sticky-download-bar.visible {
+  transform: translateY(0);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--void);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(123, 47, 255, 0.4);
+  border-radius: 4px;
+}
+
+/* Horizontal scroll */
+.h-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.h-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Underline-sweep link — used anywhere a quiet "view all" / label link appears */
+.link-sweep {
+  position: relative;
+  padding-bottom: 3px;
+  color: rgba(240, 240, 240, 0.45);
+  transition: color 0.2s ease;
+}
+.link-sweep::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 100%;
+  bottom: 0;
+  height: 1px;
+  background: #7b2fff;
+  transition: right 0.3s ease;
+}
+.link-sweep:hover {
+  color: #f0f0f0;
+}
+.link-sweep:hover::after {
+  right: 0;
+}
+
+/* Quiet media — grayscale/dim at rest, full color and slightly larger on hover.
+   Used for movie posters and network/studio logos so color reads as an
+   intentional signal of attention rather than being on by default. */
+/* Full color by default. Hovering the row/grid dims every card (spotlight-scope
+   below); hovering one specific card overrides that back to full color and
+   lifts it slightly — so color reads as "this is the one I'm on," not
+   "hover to unlock color." Order matters: the self-hover rule must come
+   after the scope-hover rule so it wins the specificity tie. */
+.quiet-media {
+  filter: none;
+  transition:
+    filter 0.35s ease,
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.spotlight-scope:hover .quiet-media {
+  filter: grayscale(0.5) brightness(0.55) saturate(0.85);
+}
+.group:hover .quiet-media {
+  filter: none;
+}
+
+/* Softens hard cuts between route navigations — applied to each page's root
+   wrapper. Next's App Router mounts a fresh component per navigation, so a
+   plain CSS animation on mount is enough; no router/transition library needed. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: page-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+
+/* Trial: slow diagonal shimmer for card loading states, replacing the flat
+   .animate-pulse skeletons and (via ShimmerImage) the previously-unhandled
+   moment where individual poster/thumbnail images pop in raw with no
+   transition at all. Built on `transform`, not `background-position`, so it
+   stays compositor-cheap with 6+ cards animating in one row at once — the
+   pseudo-element is oversized (inset: -60%) and slides across via a single
+   transform, rather than animating the gradient's own position. */
+@keyframes shimmer-sweep {
+  0% {
+    transform: translate(-35%, -35%);
+  }
+  50% {
+    transform: translate(35%, 35%);
+  }
+  100% {
+    transform: translate(-35%, -35%);
+  }
+}
+.shimmer-diagonal {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--void-2, #1a1a1a);
+}
+.shimmer-diagonal::after {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.05) 47%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 53%,
+    transparent 58%
+  );
+  animation: shimmer-sweep 3.2s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-diagonal::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Marquee */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 30s linear infinite;
+  display: flex;
+  gap: 0;
+  width: max-content;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+.marquee-mask {
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+}
+
+/* Float animation */
+@keyframes float-gentle {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.float-anim {
+  animation: float-gentle 4s ease-in-out infinite;
+}
+
+/* Glow pulse */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(123, 47, 255, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(123, 47, 255, 0.7),
+      0 0 60px rgba(0, 229, 255, 0.3);
+  }
+}
+.glow-pulse-anim {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Audio wave bars */
+@keyframes wave-bar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.wave-bar {
+  width: 3px;
+  background: var(--cyan);
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: wave-bar 0.8s ease-in-out infinite;
+}
+
+/* Reveal animations */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(40px);
+  transition:
+    opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal-up.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Card flip */
+.flip-card {
+  perspective: 1000px;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.flip-card.flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back {
+  transform: rotateY(180deg);
+}
+
+/* QR shimmer */
+@keyframes qr-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+.qr-border {
+  background: linear-gradient(90deg, var(--violet), var(--cyan), var(--violet));
+  background-size: 200% auto;
+  animation: qr-shimmer 3s linear infinite;
+  padding: 3px;
+  border-radius: 20px;
+}
+
+/* Mascot */
+@keyframes mascot-idle {
+  0%,
+  100% {
+    transform: rotate(-5deg) scale(1);
+  }
+  50% {
+    transform: rotate(5deg) scale(1.05);
+  }
+}
+.mascot {
+  animation: mascot-idle 3s ease-in-out infinite;
+}
+
+/* Stats count */
+.stat-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+}
+
+/* Play icon pulse */
+@keyframes play-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+.play-pulse {
+  animation: play-pulse 1.5s ease-in-out infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--violet-light), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Section ambient glow */
+.ambient-violet {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(123, 47, 255, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ambient-cyan {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Mobile nav */
+@media (max-width: 768px) {
+  .phone-frame {
+    width: 240px;
+    height: 500px;
+  }
+  .arch-card {
+    width: 90px;
+    height: 120px;
+  }
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer-wave-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer-wave {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-wave::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 80%,
+    transparent 100%
+  );
+  animation: shimmer-wave-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: pageEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Mobile Layout Optimizations (< 768px) ── */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* 1. Header Layout */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+  }
+
+  /* Hide desktop top nav links */
+  header nav.desktop-nav {
+    display: none;
+  }
+
+  /* 2. Hero / Featured Banner Adjustments */
+  .featured-banner {
+    min-height: 380px;
+    padding: 20px 16px;
+  }
+
+  .featured-banner h1 {
+    font-size: 1.8rem;
+    line-height: 1.2;
+  }
+
+  .featured-banner p {
+    font-size: 0.9rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* Truncate description to 3 lines */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .featured-buttons {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .featured-buttons button,
+  .featured-buttons a {
+    flex: 1; /* Stretch Play and More Info buttons equally */
+    padding: 10px 0;
+    text-align: center;
+  }
+
+  /* 3. Horizontal Touch Scroll for Movie Rows */
+  .movie-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding: 8px 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .movie-card {
+    flex: 0 0 130px; /* Compact width for cards on mobile */
+    scroll-snap-align: start;
+  }
+
+  .movie-card img {
+    border-radius: 8px;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+  }
+
+  /* 4. Fixed Bottom Navigation Bar */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-color: #0f0f14;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    justify-content: space-around;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  /* Add bottom padding to body so fixed bar doesn't cover content */
+  body {
+    padding-bottom: 65px;
+  }
+}
+
+/* Hide Next.js dev tools floating indicator / lightning bolt button */
+nextjs-portal,
+[data-nextjs-dev-tools-button],
+[data-nextjs-toast],
+div[data-nextjs-data-runtime-error-collapsed-action],
+#__next-build-watcher {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+
