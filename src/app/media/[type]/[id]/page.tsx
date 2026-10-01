@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Play, Heart, Check, Plus } from 'lucide-react';
 import AppImage from '@/components/ui/AppImage';
 import { ShimmerImage, ShimmerCard } from '@/components/Shimmer';
+import StreamtapeDownloadButton from '@/components/StreamtapeDownloadButton';
 import {
   getMovieDetails,
   getTVDetails,
@@ -888,6 +889,13 @@ export default function MediaDetailPage() {
                     ? 'Resume Watching'
                     : 'Watch Now'}
                 </button>
+
+                <StreamtapeDownloadButton
+                  tmdbId={mediaId}
+                  mediaType={mediaType}
+                  season={selectedSeason}
+                  episode={selectedEpisode}
+                />
 
                 {/* Favorite Button */}
                 <button

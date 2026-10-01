@@ -35,6 +35,8 @@ export function Navigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  if (pathname === '/login') return null;
+
   const isItemActive = (item: NavItem) => {
     if (item.match.type === 'path') return pathname === item.href;
     return pathname === '/lists' && (searchParams?.get('tab') ?? 'history') === item.match.tab;

@@ -6,7 +6,29 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/auth/callback'];
+
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  );
+}
+
+function redirectToLogin(request: NextRequest, response: NextResponse) {
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = '/login';
+  loginUrl.search = '';
+
+  const redirectResponse = NextResponse.redirect(loginUrl);
+  response.cookies.getAll().forEach(({ name, value, ...options }) => {
+    redirectResponse.cookies.set(name, value, options);
+  });
+  return redirectResponse;
+}
+
 export const updateSession = async (request: NextRequest) => {
+  const publicPath = isPublicPath(request.nextUrl.pathname);
+
   // Pass through RSC payload, component streaming, and router prefetch requests directly
   // to avoid mutating or dropping Next.js internal RSC streaming headers
   if (
@@ -51,10 +73,15 @@ export const updateSession = async (request: NextRequest) => {
       },
     );
 
-    // Refresh session if needed
-    await supabase.auth.getUser();
+    // Refresh and validate the session before serving protected pages.
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) {
+      return publicPath ? supabaseResponse : redirectToLogin(request, supabaseResponse);
+    }
   } catch (error) {
-    // Prevent unhandled errors from breaking navigation
+    if (!publicPath) {
+      return redirectToLogin(request, supabaseResponse);
+    }
   }
 
   return supabaseResponse;
