@@ -101,6 +101,15 @@ const EMBED_SOURCES: EmbedSource[] = [
       return `https://vidcore.net/tv/${id}/${s ?? 1}/${e ?? 1}?${params.toString()}`;
     },
   },
+  {
+    name: 'VidSrc',
+    color: '#38BDF8',
+    referrerPolicy: DEFAULT_REFERRER_POLICY,
+    getUrl: (id, type, s, e) =>
+      type === 'movie'
+        ? `https://vidsrc.sh/embed/movie/${id}`
+        : `https://vidsrc.sh/embed/tv/${id}/${s ?? 1}/${e ?? 1}`,
+  },
 ];
 
 // Popup / redirect blocking.
@@ -969,7 +978,7 @@ export default function MediaDetailPage() {
                       : 'bg-void-2 hover:bg-void-3 border border-glass-border text-muted hover:text-foreground'
                   }`}
                 >
-                  Source {i + 1}
+                  {src.name}
                 </button>
               ))}
               <button
@@ -1139,7 +1148,9 @@ export default function MediaDetailPage() {
             <div className="mt-3 flex items-center justify-between flex-wrap gap-2 bg-void-2/60 backdrop-blur-md p-3 rounded-xl border border-glass-border text-xs text-muted">
               <p>
                 Currently streaming from{' '}
-                <span className="text-violet-light font-semibold">Source {activeSourceIndex + 1}</span>
+                <span className="text-violet-light font-semibold">
+                  {EMBED_SOURCES[activeSourceIndex].name}
+                </span>
                 {!isMovie ? ` · S${selectedSeason}E${selectedEpisode}` : ''}
               </p>
               <button

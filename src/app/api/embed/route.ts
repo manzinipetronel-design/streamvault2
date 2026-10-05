@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server';
 // allow-same-origin, so third-party code runs in an opaque origin and can
 // never touch this site's cookies / localStorage / Supabase session.
 
-const ALLOWED_HOSTS = ['moviesapi.to', 'vidcore.org', 'vidcore.net'];
+const ALLOWED_HOSTS = ['moviesapi.to', 'vidcore.org', 'vidcore.net', 'vidsrc.sh'];
 
 const AD_HOSTS = [
   'exoclick.com', 'exosrv.com', 'trafficjunky.net', 'adnxs.com',
