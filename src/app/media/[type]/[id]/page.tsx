@@ -47,6 +47,22 @@ const DEFAULT_REFERRER_POLICY: React.HTMLAttributeReferrerPolicy = 'origin';
 
 const EMBED_SOURCES: EmbedSource[] = [
   {
+    name: 'VidSrc',
+    color: '#38BDF8',
+    referrerPolicy: DEFAULT_REFERRER_POLICY,
+    getUrl: (id, type, s, e) => {
+      const params = new URLSearchParams({
+        autoplay: '1',
+        ds_lang: 'en',
+      });
+      if (type === 'movie') {
+        return `https://vidsrc.sh/embed/movie/${id}?${params.toString()}`;
+      }
+      params.set('autonext', '1');
+      return `https://vidsrc.sh/embed/tv/${id}/${s ?? 1}/${e ?? 1}?${params.toString()}`;
+    },
+  },
+  {
     name: 'MoviesAPI',
     color: '#FF9500',
     referrerPolicy: DEFAULT_REFERRER_POLICY,
@@ -97,18 +113,9 @@ const EMBED_SOURCES: EmbedSource[] = [
       if (type === 'movie') {
         return `https://vidcore.net/movie/${id}?${params.toString()}`;
       }
-      params.set('nextButton', 'true'); // shows their native next-episode button; autoNext left off so it doesn't fight the app's own "Up Next" card
+      params.set('nextButton', 'true'); // shows their native next-episode button
       return `https://vidcore.net/tv/${id}/${s ?? 1}/${e ?? 1}?${params.toString()}`;
     },
-  },
-  {
-    name: 'VidSrc',
-    color: '#38BDF8',
-    referrerPolicy: DEFAULT_REFERRER_POLICY,
-    getUrl: (id, type, s, e) =>
-      type === 'movie'
-        ? `https://vidsrc.sh/embed/movie/${id}`
-        : `https://vidsrc.sh/embed/tv/${id}/${s ?? 1}/${e ?? 1}`,
   },
 ];
 
@@ -216,13 +223,6 @@ export default function MediaDetailPage() {
   const [trailers, setTrailers] = useState<TMDBVideo[]>([]);
   const [trailersLoading, setTrailersLoading] = useState(false);
   const [activeTrailer, setActiveTrailer] = useState<TMDBVideo | null>(null);
-
-  // "Up Next" card — manual, no autoplay timer (see explanation in chat: the
-  // player is a cross-origin iframe, so there's no reliable way to know when
-  // an episode actually ends; a fake timer based on runtime would be wrong
-  // whenever someone pauses or skips).
-  const [nextEp, setNextEp] = useState<{ ep: TMDBEpisode; season: number } | null>(null);
-  const [nextEpDismissed, setNextEpDismissed] = useState(false);
 
   // Cast & Crew, Related
   const [fullCredits, setFullCredits] = useState<TMDBCastMember[]>([]);
@@ -365,39 +365,6 @@ export default function MediaDetailPage() {
       clearTimeout(hideTimer);
     };
   }, [iframeLoaded, loadError, activeSourceIndex, selectedSeason, selectedEpisode]);
-
-  // Fetch the actual next episode for the "Up Next" card. Tries the current
-  // season first; if the playing episode is the season finale, tries season+1
-  // episode 1 — an empty result from that call (handled inside
-  // getSeasonEpisodes) just means there isn't a next season, no need to know
-  // totalSeasons up front for this.
-  useEffect(() => {
-    async function fetchNextEpisode() {
-      if (mediaType !== 'tv' || !showPlayer || !mediaId) {
-        setNextEp(null);
-        return;
-      }
-      try {
-        const currentSeasonEps = await getSeasonEpisodes(Number(mediaId), selectedSeason);
-        const sameSeasonNext = currentSeasonEps.find((e) => e.episodeNumber === selectedEpisode + 1);
-        if (sameSeasonNext) {
-          setNextEp({ ep: sameSeasonNext, season: selectedSeason });
-          setNextEpDismissed(false);
-          return;
-        }
-        const nextSeasonEps = await getSeasonEpisodes(Number(mediaId), selectedSeason + 1);
-        if (nextSeasonEps.length > 0) {
-          setNextEp({ ep: nextSeasonEps[0], season: selectedSeason + 1 });
-          setNextEpDismissed(false);
-        } else {
-          setNextEp(null);
-        }
-      } catch {
-        setNextEp(null);
-      }
-    }
-    fetchNextEpisode();
-  }, [mediaId, mediaType, showPlayer, selectedSeason, selectedEpisode]);
 
   useEffect(() => {
     async function checkStatus() {
@@ -1100,48 +1067,6 @@ export default function MediaDetailPage() {
                 onError={handleIframeError}
               />
 
-              {/* ── Up Next overlay (TV only, manual) ── */}
-              {nextEp && iframeLoaded && !nextEpDismissed && (
-                <div className="absolute bottom-4 right-4 z-20 w-[280px] flex items-center gap-3 bg-void-2/85 backdrop-blur-md p-2.5 rounded-xl border border-glass-border shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
-                  <div className="relative flex-none w-16 aspect-video rounded-md overflow-hidden bg-void-3">
-                    {nextEp.ep.stillImg ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={nextEp.ep.stillImg}
-                        alt={nextEp.ep.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[9.5px] font-semibold uppercase tracking-wider text-violet-light mb-0.5">
-                      Up next · S{nextEp.season}E{nextEp.ep.episodeNumber}
-                    </p>
-                    <p className="font-display text-[12.5px] font-semibold text-foreground leading-tight line-clamp-1">
-                      {nextEp.ep.name}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => playEpisode(nextEp.season, nextEp.ep.episodeNumber)}
-                    aria-label="Play next episode"
-                    className="flex-none w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all duration-150"
-                    style={{ background: 'linear-gradient(180deg, #ffffff, #e8e6ea)' }}
-                  >
-                    <svg viewBox="0 0 24 24" className="w-3 h-3 fill-void translate-x-[1px]">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setNextEpDismissed(true)}
-                    aria-label="Dismiss"
-                    className="flex-none w-6 h-6 rounded-md flex items-center justify-center text-muted hover:text-foreground hover:bg-white/[0.08] transition-colors"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Source info + controls */}
@@ -1285,7 +1210,7 @@ export default function MediaDetailPage() {
                 />
                 <div
                   ref={trailersRowRef}
-                  className="spotlight-scope flex gap-6 overflow-x-auto pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 >
                 {trailers.map((t) => (
                   <button
@@ -1341,7 +1266,7 @@ export default function MediaDetailPage() {
               />
               <div
                 ref={relatedRowRef}
-                className="spotlight-scope flex gap-6 overflow-x-auto pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               >
               {related.map((r) => (
                 <Link
@@ -1372,7 +1297,7 @@ export default function MediaDetailPage() {
                       )}
                     </div>
                   </div>
-                  <p className="font-display text-[13px] font-semibold text-foreground leading-tight line-clamp-1">
+                  <p className="font-display text-[13px] font-semibold text-foreground line-clamp-2 break-words leading-tight">
                     {r.title}
                   </p>
                 </Link>
@@ -1393,7 +1318,7 @@ export default function MediaDetailPage() {
               />
               <div
                 ref={castRowRef}
-                className="spotlight-scope flex gap-6 overflow-x-auto pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               >
               {fullCredits.map((c) => (
                 <Link
@@ -1415,7 +1340,7 @@ export default function MediaDetailPage() {
                       </div>
                     )}
                   </div>
-                  <p className="font-display text-[12px] font-semibold text-foreground leading-tight line-clamp-1">
+                  <p className="font-display text-[12px] font-semibold text-foreground line-clamp-2 break-words leading-tight">
                     {c.name}
                   </p>
                   {c.character && (

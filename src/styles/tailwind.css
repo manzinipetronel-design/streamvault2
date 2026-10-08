@@ -327,25 +327,11 @@ body {
   right: 0;
 }
 
-/* Quiet media — grayscale/dim at rest, full color and slightly larger on hover.
-   Used for movie posters and network/studio logos so color reads as an
-   intentional signal of attention rather than being on by default. */
-/* Full color by default. Hovering the row/grid dims every card (spotlight-scope
-   below); hovering one specific card overrides that back to full color and
-   lifts it slightly — so color reads as "this is the one I'm on," not
-   "hover to unlock color." Order matters: the self-hover rule must come
-   after the scope-hover rule so it wins the specificity tie. */
 .quiet-media {
   filter: none;
   transition:
     filter 0.35s ease,
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.spotlight-scope:hover .quiet-media {
-  filter: grayscale(0.5) brightness(0.55) saturate(0.85);
-}
-.group:hover .quiet-media {
-  filter: none;
 }
 
 /* Softens hard cuts between route navigations — applied to each page's root
@@ -769,5 +755,4 @@ div[data-nextjs-data-runtime-error-collapsed-action],
   pointer-events: none !important;
   opacity: 0 !important;
 }
-
 

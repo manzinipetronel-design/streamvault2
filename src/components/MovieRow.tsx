@@ -32,6 +32,8 @@ interface MovieRowProps {
   /** Where "View all" goes — e.g. /browse/catalog?genre=28&name=Action.
    *  Defaults to /browse when a row has no natural drill-down target. */
   viewAllHref?: string;
+  /** Optional one-liner shown under the title (e.g. "Top-rated releases from 2020–2029"). */
+  subtitle?: string;
 }
 
 export default function MovieRow({
@@ -42,6 +44,7 @@ export default function MovieRow({
   showRank,
   spotlightStyles = false,
   viewAllHref = '/browse',
+  subtitle,
 }: MovieRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -61,9 +64,12 @@ export default function MovieRow({
   return (
     <div className="group/row flex flex-col pt-9 pb-1 relative">
       <div className={`flex items-baseline justify-between mb-5 px-4 md:px-0${spotlightStyles ? ' sv-row-head' : ''}`}>
-        <h3 className="font-display text-lg md:text-xl font-semibold text-foreground tracking-tight">
-          {title}
-        </h3>
+        <div>
+          <h3 className="font-display text-lg md:text-xl font-semibold text-foreground tracking-tight">
+            {title}
+          </h3>
+          {subtitle && <p className="text-[13px] text-muted mt-1">{subtitle}</p>}
+        </div>
         <Link href={viewAllHref} className="link-sweep text-[13px]">
           View all
         </Link>

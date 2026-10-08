@@ -921,3 +921,16 @@
   color: var(--muted);
   max-width: 340px;
 }
+
+/* ---------- Full-bleed scrolling rows (media page) ----------
+   Lets a horizontal scroller inside a centered column run out to the
+   screen edge: the negative margin pushes its right edge to the viewport,
+   the matching padding keeps the last card aligned with the column when
+   you scroll all the way to the end, and the mask fades the right edge
+   instead of hard-cutting it. */
+.sv-bleed-row {
+  margin-right: calc(50% - 50vw);
+  padding-right: calc(50vw - 50%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 96px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 96px), transparent 100%);
+}

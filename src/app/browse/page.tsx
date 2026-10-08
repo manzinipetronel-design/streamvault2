@@ -157,53 +157,20 @@ export default async function BrowsePage() {
   ]);
 
   return (
-    <div className="page-enter min-h-screen bg-void text-foreground overflow-x-hidden font-sans antialiased selection:bg-violet selection:text-white pb-24">
-      {/* Nav — same treatment as the homepage */}
-      <header className="fixed top-0 left-0 w-full z-50 bg-gradient-to-b from-black/90 via-black/40 to-transparent px-6 md:px-12 py-5 flex items-center justify-between backdrop-blur-[2px]">
-        <div className="flex items-center gap-10">
-          <Link
-            href="/"
-            className="font-display font-extrabold text-lg tracking-tight bg-gradient-to-r from-violet-light to-magenta bg-clip-text text-transparent"
-          >
-            STREAMVAULT
-          </Link>
-          <nav className="desktop-nav hidden md:flex items-center gap-6 text-[13px] text-muted font-medium">
-            <Link href="/" className="hover:text-foreground transition duration-200">
-              Home
-            </Link>
-            <Link href="/series" className="hover:text-foreground transition duration-200">
-              Series
-            </Link>
-            <Link href="/movies" className="hover:text-foreground transition duration-200">
-              Movies
-            </Link>
-            <Link href="/browse" className="text-foreground">
-              Browse
-            </Link>
-            <Link href="/lists" className="hover:text-foreground transition duration-200">
-              Watchlist
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-6">
-          <Link
-            href="/search"
-            className="text-muted hover:text-foreground text-sm font-medium transition cursor-pointer"
-          >
-            Search
-          </Link>
+    <div className="page-enter min-h-screen bg-void text-foreground overflow-x-hidden font-sans antialiased selection:bg-violet selection:text-white sv-page">
+      <div className="sv-page-inner">
+        {/* Page head — the old top nav is gone (the sidebar covers it), so the
+          profile avatar lives here instead, same as the other redesigned pages. */}
+        <div className="sv-page-head !items-start !mb-10">
+          <div className="max-w-xl">
+            <h1 className="font-display text-3xl md:text-[38px] font-extrabold leading-tight tracking-tight mb-3">
+              Find something worth staying up for.
+            </h1>
+            <p className="text-muted text-[15px] leading-relaxed">
+              Sorted by mood rather than category — hover a panel to see what&apos;s inside.
+            </p>
+          </div>
           <HeaderAvatar />
-        </div>
-      </header>
-
-      <main className="pt-28 px-6 md:px-12 max-w-7xl mx-auto">
-        <div className="max-w-xl mb-10">
-          <h1 className="font-display text-3xl md:text-[38px] font-extrabold leading-tight tracking-tight mb-3">
-            Find something worth staying up for.
-          </h1>
-          <p className="text-muted text-[15px] leading-relaxed">
-            Sorted by mood rather than category — hover a panel to see what&apos;s inside.
-          </p>
         </div>
 
         {/* Mood rail */}
@@ -273,29 +240,27 @@ export default async function BrowsePage() {
             </div>
           </section>
         )}
-      </main>
 
-      {/* Era rows — MovieRow already carries the quiet-poster + rank treatment */}
-      <div className="mt-4 flex flex-col">
-        {eras.map((era) => (
-          <div key={era.key}>
-            <div className="px-6 md:px-12 -mb-1">
-              <p className="text-[13px] text-muted -mt-1">{era.subtitle}</p>
+        {/* Era rows — captions render under each row title via MovieRow's subtitle prop. */}
+        <div className="mt-8 flex flex-col gap-4">
+          {eras.map((era) => (
+            <div key={era.key}>
+              <MovieRow
+                title={era.title}
+                subtitle={era.subtitle}
+                items={era.items.map((m) => ({
+                  id: m.id,
+                  title: m.title,
+                  overview: m.overview,
+                  poster_path: m.img,
+                  vote_average: parseFloat(m.rating) || undefined,
+                  release_date: m.year ? `${m.year}-01-01` : undefined,
+                }))}
+                isMock
+              />
             </div>
-            <MovieRow
-              title={era.title}
-              items={era.items.map((m) => ({
-                id: m.id,
-                title: m.title,
-                overview: m.overview,
-                poster_path: m.img,
-                vote_average: parseFloat(m.rating) || undefined,
-                release_date: m.year ? `${m.year}-01-01` : undefined,
-              }))}
-              isMock
-            />
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
