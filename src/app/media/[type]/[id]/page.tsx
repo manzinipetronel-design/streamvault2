@@ -39,7 +39,13 @@ interface EmbedSource {
   // Override the popup-blocking sandbox for a source that refuses to play
   // when sandboxed. `false` = never sandbox this source.
   sandbox?: string | false;
-  getUrl: (tmdbId: string, type: 'movie' | 'tv', season?: number, episode?: number) => string;
+  getUrl: (
+    tmdbId: string,
+    type: 'movie' | 'tv',
+    season?: number,
+    episode?: number,
+    startAt?: number
+  ) => string;
 }
 
 const DEFAULT_ALLOW = 'autoplay; fullscreen; picture-in-picture; encrypted-media';
@@ -50,11 +56,12 @@ const EMBED_SOURCES: EmbedSource[] = [
     name: 'VidSrc',
     color: '#38BDF8',
     referrerPolicy: DEFAULT_REFERRER_POLICY,
-    getUrl: (id, type, s, e) => {
+    getUrl: (id, type, s, e, startAt) => {
       const params = new URLSearchParams({
         autoplay: '1',
         ds_lang: 'en',
       });
+      if (startAt && startAt > 0) params.set('startAt', String(Math.floor(startAt)));
       if (type === 'movie') {
         return `https://vidsrc.sh/embed/movie/${id}?${params.toString()}`;
       }
@@ -130,6 +137,10 @@ const POPUP_BLOCK_SANDBOX =
 // Used for proxied embeds served from our own origin — must NOT include
 // allow-same-origin, or third-party code could read our session storage.
 const CLEAN_MODE_SANDBOX = 'allow-scripts allow-forms allow-presentation';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 // Same glass scroll-arrow pair used by the homepage's MovieRow — fades in on
 // row hover, sits over the row's edges rather than pushing layout.
@@ -212,6 +223,14 @@ export default function MediaDetailPage() {
   const loadCountRef = useRef(0);
   const recoveriesRef = useRef(0);
   const firstLoadAtRef = useRef(0);
+  const lastProgressSavedRef = useRef<{ key: string; progress: number } | null>(null);
+  const resumeProgressRef = useRef<{
+    key: string;
+    progress: number;
+    duration: number;
+    season?: number;
+    episode?: number;
+  } | null>(null);
 
   // Episode browsing rail (separate from the player's own season/episode
   // selects — this is what's visible on the page before you've hit play)
@@ -413,75 +432,52 @@ export default function MediaDetailPage() {
     loadWatchHistory();
   }, [mediaId, mediaType, user?.id]);
 
-  // Periodic playback progress tracking while player is open
-  const playbackProgressRef = useRef(0);
-  useEffect(() => {
-    if (!showPlayer || !detail) return;
-
-    const durationSec =
-      detail.mediaType === 'movie'
-        ? ((detail as TMDBMovieDetail).runtime || 110) * 60
-        : 45 * 60;
-
-    if (lastWatched?.progress && playbackProgressRef.current === 0) {
-      playbackProgressRef.current = lastWatched.progress;
-    } else if (playbackProgressRef.current === 0) {
-      playbackProgressRef.current = 15;
-    }
-
-    const interval = setInterval(() => {
-      playbackProgressRef.current += 15;
-      updateWatchProgress({
-        mediaId: detail.id,
-        mediaType: detail.mediaType,
-        title: detail.title,
-        posterPath: detail.img || '',
-        progress: playbackProgressRef.current,
-        duration: durationSec,
-        seasonNumber: detail.mediaType === 'tv' ? selectedSeason : undefined,
-        episodeNumber: detail.mediaType === 'tv' ? selectedEpisode : undefined,
-      });
-    }, 15000);
-
-    const handleMessage = (e: MessageEvent) => {
-      try {
-        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (data && typeof data === 'object') {
-          const currentTime = data.currentTime ?? data.progress ?? data.time;
-          const totalDuration = data.duration ?? durationSec;
-          if (typeof currentTime === 'number' && currentTime > 0) {
-            playbackProgressRef.current = Math.round(currentTime);
-            updateWatchProgress({
-              mediaId: detail.id,
-              mediaType: detail.mediaType,
-              title: detail.title,
-              posterPath: detail.img || '',
-              progress: Math.round(currentTime),
-              duration: Math.round(totalDuration),
-              seasonNumber: detail.mediaType === 'tv' ? selectedSeason : undefined,
-              episodeNumber: detail.mediaType === 'tv' ? selectedEpisode : undefined,
-            });
-          }
-        }
-      } catch {
-        /* silent */
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [showPlayer, detail, selectedSeason, selectedEpisode, lastWatched]);
-
   const getEmbedUrl = useCallback(() => {
     const source = EMBED_SOURCES[activeSourceIndex];
-    const url = source.getUrl(mediaId, mediaType, selectedSeason, selectedEpisode);
+    const resumeKey =
+      mediaType === 'movie'
+        ? `${mediaType}:${mediaId}`
+        : `${mediaType}:${mediaId}:${selectedSeason}:${selectedEpisode}`;
+    const latestProgress =
+      resumeProgressRef.current?.key === resumeKey
+        ? resumeProgressRef.current
+        : null;
+    const canResumeEpisode =
+      mediaType === 'movie' ||
+      latestProgress !== null ||
+      (lastWatched?.season === selectedSeason && lastWatched?.episode === selectedEpisode);
+    const savedProgress = latestProgress?.progress ?? lastWatched?.progress;
+    const savedDuration = latestProgress?.duration ?? lastWatched?.duration;
+    const resumeProgress =
+      activeSourceIndex === 0 &&
+      canResumeEpisode &&
+      savedProgress &&
+      (!savedDuration || savedProgress < savedDuration - 10)
+        ? savedProgress
+        : undefined;
+    const url = source.getUrl(
+      mediaId,
+      mediaType,
+      selectedSeason,
+      selectedEpisode,
+      resumeProgress
+    );
     return cleanMode ? `/api/embed?url=${encodeURIComponent(url)}` : url;
-  }, [mediaId, mediaType, selectedSeason, selectedEpisode, activeSourceIndex, cleanMode]);
+  }, [
+    mediaId,
+    mediaType,
+    selectedSeason,
+    selectedEpisode,
+    activeSourceIndex,
+    cleanMode,
+    lastWatched,
+  ]);
 
   const handleWatchNow = (seasonOverride?: number, episodeOverride?: number) => {
+    if (mediaType === 'tv') {
+      if (seasonOverride !== undefined) setSelectedSeason(seasonOverride);
+      if (episodeOverride !== undefined) setSelectedEpisode(episodeOverride);
+    }
     setShowPlayer(true);
     setActiveSourceIndex(0);
     setLoadError(false);
@@ -518,22 +514,6 @@ export default function MediaDetailPage() {
         },
         user?.id
       );
-
-      const durationSec =
-        detail.mediaType === 'movie'
-          ? ((detail as TMDBMovieDetail).runtime || 110) * 60
-          : 45 * 60;
-
-      updateWatchProgress({
-        mediaId: detail.id,
-        mediaType: detail.mediaType,
-        title: detail.title,
-        posterPath: detail.img || '',
-        progress: lastWatched?.progress || 15,
-        duration: durationSec,
-        seasonNumber: detail.mediaType === 'tv' ? s : undefined,
-        episodeNumber: detail.mediaType === 'tv' ? e : undefined,
-      });
     }
   };
 
@@ -542,6 +522,123 @@ export default function MediaDetailPage() {
     setSelectedEpisode(episodeNum);
     handleWatchNow(seasonNum, episodeNum);
   };
+
+  // VidSrc is cross-origin, so only accept messages from the expected frame
+  // and origin. Its PLAYER_EVENT payload supplies real progress and completion.
+  useEffect(() => {
+    if (
+      !showPlayer ||
+      !detail ||
+      activeSourceIndex !== 0 ||
+      cleanMode ||
+      !iframeRef.current
+    ) {
+      return;
+    }
+
+    const fallbackDuration =
+      detail.mediaType === 'movie'
+        ? ((detail as TMDBMovieDetail).runtime || 110) * 60
+        : 45 * 60;
+
+    const handleMessage = (event: MessageEvent<unknown>) => {
+      if (
+        event.origin !== 'https://vidsrc.sh' ||
+        event.source !== iframeRef.current?.contentWindow
+      ) {
+        return;
+      }
+
+      let message: unknown = event.data;
+      if (typeof message === 'string') {
+        try {
+          message = JSON.parse(message);
+        } catch {
+          return;
+        }
+      }
+      if (!isRecord(message) || message.type !== 'PLAYER_EVENT' || !isRecord(message.data)) {
+        return;
+      }
+
+      const payload = message.data;
+      if (!isRecord(payload.player_info) || typeof payload.player_status !== 'string') {
+        return;
+      }
+      const playerInfo = payload.player_info;
+      const status = payload.player_status;
+      if (!['playing', 'paused', 'completed', 'seeked'].includes(status)) return;
+      if (playerInfo.mediaType !== detail.mediaType) return;
+
+      const progress =
+        typeof payload.player_progress === 'number' && Number.isFinite(payload.player_progress)
+          ? Math.max(0, payload.player_progress)
+          : null;
+      const duration =
+        typeof payload.player_duration === 'number' &&
+        Number.isFinite(payload.player_duration) &&
+        payload.player_duration > 0
+          ? payload.player_duration
+          : fallbackDuration;
+
+      const storedProgress = status === 'completed' ? duration : progress;
+      const playerSeason =
+        typeof playerInfo.season === 'number' && Number.isFinite(playerInfo.season)
+          ? playerInfo.season
+          : selectedSeason;
+      const playerEpisode =
+        typeof playerInfo.episode === 'number' && Number.isFinite(playerInfo.episode)
+          ? playerInfo.episode
+          : selectedEpisode;
+      if (storedProgress !== null && (storedProgress > 0 || status === 'completed')) {
+        const roundedProgress = Math.round(storedProgress);
+        const roundedDuration = Math.round(duration);
+        const resumeKey =
+          detail.mediaType === 'movie'
+            ? `${detail.mediaType}:${mediaId}`
+            : `${detail.mediaType}:${mediaId}:${playerSeason}:${playerEpisode}`;
+        const shouldSaveProgress =
+            status === 'paused' ||
+            status === 'seeked' ||
+            status === 'completed' ||
+            lastProgressSavedRef.current?.key !== resumeKey ||
+            Math.abs(roundedProgress - (lastProgressSavedRef.current?.progress ?? 0)) >= 15;
+        resumeProgressRef.current = {
+            key: resumeKey,
+          progress: roundedProgress,
+          duration: roundedDuration,
+          season: detail.mediaType === 'tv' ? playerSeason : undefined,
+          episode: detail.mediaType === 'tv' ? playerEpisode : undefined,
+        };
+        if (shouldSaveProgress) {
+          lastProgressSavedRef.current = { key: resumeKey, progress: roundedProgress };
+          void updateWatchProgress({
+            mediaId: detail.id,
+            mediaType: detail.mediaType,
+            title: detail.title,
+            posterPath: detail.img || '',
+            progress: roundedProgress,
+            duration: roundedDuration,
+            seasonNumber: detail.mediaType === 'tv' ? playerSeason : undefined,
+            episodeNumber: detail.mediaType === 'tv' ? playerEpisode : undefined,
+          }).catch((error: unknown) => {
+            console.error('[VidSrc] Failed to save playback progress:', error);
+          });
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [
+    showPlayer,
+    detail,
+    activeSourceIndex,
+    cleanMode,
+    mediaId,
+    selectedSeason,
+    selectedEpisode,
+  ]);
 
   const handleSourceChange = (index: number) => {
     setActiveSourceIndex(index);
@@ -851,7 +948,12 @@ export default function MediaDetailPage() {
               <div className="flex items-center gap-3 pt-2">
                 {/* Primary Watch Button */}
                 <button
-                  onClick={() => handleWatchNow(lastWatched?.season, lastWatched?.episode)}
+                  onClick={() =>
+                    handleWatchNow(
+                      resumeProgressRef.current?.season ?? lastWatched?.season,
+                      resumeProgressRef.current?.episode ?? lastWatched?.episode
+                    )
+                  }
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-black font-bold text-sm hover:bg-zinc-200 transition-all shadow-lg cursor-pointer active:scale-95"
                 >
                   <Play className="w-4 h-4 fill-current" />
