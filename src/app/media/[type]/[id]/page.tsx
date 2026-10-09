@@ -36,9 +36,13 @@ interface EmbedSource {
   // working reference implementation that sends neither attribute at all.
   allow?: string;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  supportsResume?: boolean;
   // Override the popup-blocking sandbox for a source that refuses to play
   // when sandboxed. `false` = never sandbox this source.
   sandbox?: string | false;
+  // Resolve this source's redirects on the server (/api/embed, compat mode)
+  // and serve it from the isolated embed host. Implies no iframe sandbox.
+  serverResolved?: boolean;
   getUrl: (
     tmdbId: string,
     type: 'movie' | 'tv',
@@ -56,6 +60,11 @@ const EMBED_SOURCES: EmbedSource[] = [
     name: 'VidSrc',
     color: '#38BDF8',
     referrerPolicy: DEFAULT_REFERRER_POLICY,
+    // vidsrc.sh refuses to play inside a sandboxed iframe, so it is never
+    // sandboxed. Redirects are handled server-side instead (see /api/embed).
+    sandbox: false,
+    serverResolved: true,
+    supportsResume: true,
     getUrl: (id, type, s, e, startAt) => {
       const params = new URLSearchParams({
         autoplay: '1',
@@ -67,6 +76,24 @@ const EMBED_SOURCES: EmbedSource[] = [
       }
       params.set('autonext', '1');
       return `https://vidsrc.sh/embed/tv/${id}/${s ?? 1}/${e ?? 1}?${params.toString()}`;
+    },
+  },
+  {
+    name: 'Vidsrc2',
+    color: '#F472B6',
+    referrerPolicy: DEFAULT_REFERRER_POLICY,
+    supportsResume: true,
+    getUrl: (id, type, s, e, startAt) => {
+      const params = new URLSearchParams({
+        autoplay: '1',
+        ds_lang: 'en',
+      });
+      if (startAt && startAt > 0) params.set('startAt', String(Math.floor(startAt)));
+      if (type === 'movie') {
+        return `https://vidsrc2.ru/embed/movie/${id}?${params.toString()}`;
+      }
+      params.set('autonext', '1');
+      return `https://vidsrc2.ru/embed/tv/${id}/${s ?? 1}/${e ?? 1}?${params.toString()}`;
     },
   },
   {
@@ -137,6 +164,17 @@ const POPUP_BLOCK_SANDBOX =
 // Used for proxied embeds served from our own origin — must NOT include
 // allow-same-origin, or third-party code could read our session storage.
 const CLEAN_MODE_SANDBOX = 'allow-scripts allow-forms allow-presentation';
+// Optional partial sandbox on the isolated origin before falling back to fully
+// unsandboxed compatibility mode (useful for sources that still work with a
+// partial sandbox, but can break if stricter).
+const COMPAT_SANDBOX =
+  process.env.NEXT_PUBLIC_EMBED_COMPAT_SANDBOX === '1'
+    ? 'allow-scripts allow-same-origin allow-forms allow-presentation'
+    : undefined;
+// Isolated origin (a hostname that shares no cookies with the main site) used
+// for sources that can't be sandboxed. See EMBED_ISOLATED_HOST in .env.example.
+const EMBED_ORIGIN = (process.env.NEXT_PUBLIC_EMBED_ORIGIN ?? '').replace(/\/$/, '');
+const isUnsandboxed = (source: EmbedSource) => !!source.serverResolved && !!EMBED_ORIGIN;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -449,7 +487,7 @@ export default function MediaDetailPage() {
     const savedProgress = latestProgress?.progress ?? lastWatched?.progress;
     const savedDuration = latestProgress?.duration ?? lastWatched?.duration;
     const resumeProgress =
-      activeSourceIndex === 0 &&
+      source.supportsResume &&
       canResumeEpisode &&
       savedProgress &&
       (!savedDuration || savedProgress < savedDuration - 10)
@@ -462,6 +500,12 @@ export default function MediaDetailPage() {
       selectedEpisode,
       resumeProgress
     );
+    // Sandbox-intolerant sources: resolved on the server, served from the
+    // isolated host. Without NEXT_PUBLIC_EMBED_ORIGIN we fall back to the
+    // direct URL (unsandboxed) rather than serve it from the main origin.
+    if (isUnsandboxed(source)) {
+      return `${EMBED_ORIGIN}/api/embed?mode=compat&url=${encodeURIComponent(url)}`;
+    }
     return cleanMode ? `/api/embed?url=${encodeURIComponent(url)}` : url;
   }, [
     mediaId,
@@ -1082,6 +1126,13 @@ export default function MediaDetailPage() {
               </button>
             </div>
 
+            {cleanMode && isUnsandboxed(EMBED_SOURCES[activeSourceIndex]) && (
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
+                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                isolated, not sandboxed
+              </div>
+            )}
+
             {/* Load error banner */}
             {loadError && (
               <div className="flex items-center justify-between px-4 py-3 rounded-xl mb-4 bg-rose-500/10 border border-rose-500/30">
@@ -1152,7 +1203,11 @@ export default function MediaDetailPage() {
                 src={getEmbedUrl()}
                 className="w-full h-full"
                 allowFullScreen
-                {...(cleanMode
+                {...(isUnsandboxed(EMBED_SOURCES[activeSourceIndex])
+                  ? COMPAT_SANDBOX
+                    ? { sandbox: COMPAT_SANDBOX }
+                    : {}
+                  : cleanMode
                   ? { sandbox: CLEAN_MODE_SANDBOX } // no allow-same-origin: embed code can't touch our origin
                   : blockPopups && EMBED_SOURCES[activeSourceIndex].sandbox !== false
                     ? { sandbox: EMBED_SOURCES[activeSourceIndex].sandbox || POPUP_BLOCK_SANDBOX }

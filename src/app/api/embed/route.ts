@@ -1,59 +1,34 @@
 import { NextResponse } from 'next/server';
+import {
+  BlockedRedirectError,
+  embedSecurityHeaders,
+  fetchResolved,
+  guardScript,
+  isAllowedUrl,
+  isIsolatedHost,
+  noticePage,
+  readTextCapped,
+  relayShim,
+  sanitizeHtml,
+} from '@/lib/server/embedProxy';
 
-// "Clean mode" embed proxy.
-// Fetches an embed page server-side, strips known ad scripts, injects a guard
-// script (blocks window.open, cross-site link clicks and — in browsers that
-// support the Navigation API — script-driven redirects), then serves it.
+// Embed proxy.
 //
-// SECURITY: the response is served with a CSP `sandbox` header WITHOUT
-// allow-same-origin, so third-party code runs in an opaque origin and can
-// never touch this site's cookies / localStorage / Supabase session.
-
-const ALLOWED_HOSTS = ['moviesapi.to', 'vidcore.org', 'vidcore.net', 'vidsrc.sh'];
-
-const AD_HOSTS = [
-  'exoclick.com', 'exosrv.com', 'trafficjunky.net', 'adnxs.com',
-  'doubleclick.net', 'googlesyndication.com', 'popads.net', 'popcash.net',
-  'propellerads.com', 'hilltopads.net', 'adsterra.com', 'juicyads.com',
-  'plugrush.com', 'revcontent.com', 'outbrain.com', 'taboola.com', 'mgid.com',
-  'zedo.com', 'clickadu.com', 'adcash.com', 'adskeeper.co.uk',
-  'bidvertiser.com', 'yllix.com', 'popunder.net', 'pop.cash',
-  'popuptraffic.com', 'clkmon.com', 'clkrev.com', 'go2speed.org',
-];
-
-function isAllowedHost(host: string) {
-  host = host.toLowerCase();
-  return ALLOWED_HOSTS.some((d) => host === d || host.endsWith('.' + d));
-}
-
-function guardScript(allowedOrigin: string) {
-  return `<script>(function(){
-var ALLOWED=${JSON.stringify(allowedOrigin)};
-try{window.open=function(){return null;};}catch(e){}
-document.addEventListener('click',function(e){
-  var a=e.target&&e.target.closest&&e.target.closest('a[href]');
-  if(!a)return;
-  try{var u=new URL(a.href,location.href);
-    if(u.origin!==ALLOWED&&(a.target==='_blank'||a.target==='_top'||a.target==='_parent')){
-      e.preventDefault();e.stopImmediatePropagation();}
-  }catch(_){
-  }
-},true);
-try{if(window.navigation&&navigation.addEventListener){
-  navigation.addEventListener('navigate',function(e){
-    try{var u=new URL(e.destination.url);
-      if(e.cancelable&&u.origin!==ALLOWED&&u.protocol.indexOf('http')===0&&u.origin!==location.origin){e.preventDefault();}
-    }catch(_){
-    }
-  });
-}}catch(_){
-}
-})();</script>`;
-}
+//  mode=strict (default, what "Clean mode" uses): page is served with a CSP
+//    `sandbox` header and no allow-same-origin, so third-party code can never
+//    touch this site's cookies / storage.
+//
+//  mode=compat (used by sources that refuse to run when sandboxed, e.g.
+//    vidsrc.sh): NO sandbox header. Only served on an isolated host
+//    (EMBED_ISOLATED_HOST) that shares no cookies/storage with the main app.
+//
+// In both modes every HTTP / meta-refresh redirect is resolved server-side:
+// the browser only receives the final cleaned page.
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const target = searchParams.get('url');
+  const compat = searchParams.get('mode') === 'compat';
   if (!target) return new NextResponse('Missing url', { status: 400 });
 
   let parsed: URL;
@@ -62,67 +37,66 @@ export async function GET(request: Request) {
   } catch {
     return new NextResponse('Invalid url', { status: 400 });
   }
-  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
+  if (!isAllowedUrl(parsed)) {
     return new NextResponse('Host not allowed', { status: 403 });
+  }
+  if (compat && !isIsolatedHost(request)) {
+    return new NextResponse(
+      'compat mode is only served from an isolated host (set EMBED_ISOLATED_HOST)',
+      { status: 403 }
+    );
+  }
+
+  // Send the same Referer the browser would have sent for a direct iframe:
+  // the page that embeds us (the main site), not the proxy host.
+  let referer = new URL(request.url).origin + '/';
+  try {
+    const r = request.headers.get('referer');
+    if (r) referer = new URL(r).origin + '/';
+  } catch {
+    /* keep default */
   }
 
   try {
-    const upstream = await fetch(parsed.toString(), {
+    const { res: upstream, url: finalUrl } = await fetchResolved(parsed, {
       headers: {
         'User-Agent': request.headers.get('user-agent') ?? 'Mozilla/5.0',
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': request.headers.get('accept-language') ?? 'en-US,en;q=0.9',
-        Referer: new URL(request.url).origin + '/',
+        Referer: referer,
       },
-      redirect: 'manual',
       signal: AbortSignal.timeout(15000),
     });
-
-    // Don't follow redirects blindly — only allow redirects to allowed hosts.
-    if (upstream.status >= 300 && upstream.status < 400) {
-      const loc = upstream.headers.get('location');
-      if (loc) {
-        const next = new URL(loc, parsed);
-        if (isAllowedHost(next.hostname)) {
-          return NextResponse.redirect(
-            new URL(`/api/embed?url=${encodeURIComponent(next.toString())}`, request.url)
-          );
-        }
-      }
-      return new NextResponse('Blocked redirect', { status: 403 });
-    }
 
     const ct = upstream.headers.get('content-type') ?? '';
     if (!upstream.ok || !ct.includes('text/html')) {
       return new NextResponse('Upstream not HTML', { status: 502 });
     }
 
-    let html = await upstream.text();
+    let html = sanitizeHtml(await readTextCapped(upstream), finalUrl);
 
-    // Strip external ad scripts.
-    const adPattern = AD_HOSTS.map((h) => h.replace(/\./g, '\\.')).join('|');
-    html = html.replace(
-      new RegExp(`<script\\b[^>]*\\bsrc=["'][^"']*(?:${adPattern})[^"']*["'][^>]*>\\s*</script>`, 'gi'),
-      ''
-    );
-
-    // <base> so relative assets still load from the embed's origin, plus guard.
-    const inject = `<base href="${parsed.origin}/">` + guardScript(parsed.origin);
-    html = /<head[^>]*>/i.test(html)
-      ? html.replace(/<head[^>]*>/i, (m) => m + inject)
-      : inject + html;
+    // <base> so relative assets still load from the embed's own origin.
+    const inject =
+      `<base href="${finalUrl.origin}/">` +
+      guardScript() +
+      (compat ? relayShim(finalUrl.origin) : '');
+    const HEAD_RE = /<head(?:\s[^>]*)?>/i;
+    html = HEAD_RE.test(html) ? html.replace(HEAD_RE, (m) => m + inject) : inject + html;
 
     return new NextResponse(html, {
       status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'Content-Security-Policy':
-          'sandbox allow-scripts allow-forms allow-presentation',
-        'Referrer-Policy': 'no-referrer',
-      },
+      headers: embedSecurityHeaders(compat),
     });
   } catch (err) {
+    if (err instanceof BlockedRedirectError) {
+      // The host tried to bounce us somewhere off the allow-list (an ad, or a
+      // mirror you may want to add via EMBED_EXTRA_ALLOWED_HOSTS).
+      console.warn('[Embed proxy] blocked redirect to', err.target);
+      return new NextResponse(
+        noticePage('This source tried to redirect away and was blocked.<br>Try another source.'),
+        { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
+      );
+    }
     console.error('[Embed proxy] Error:', err);
     return new NextResponse('Proxy error', { status: 502 });
   }
