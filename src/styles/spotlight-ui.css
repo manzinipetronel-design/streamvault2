@@ -412,20 +412,23 @@
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.3s var(--sv-ease), box-shadow 0.3s var(--sv-ease);
+}
+/* Same hover as the media page: the poster zooms slightly and a soft gradient
+   fades in with the details. No lift, no shadow, nothing dims the neighbours. */
+.sv-poster img {
+  transition: transform 0.5s var(--sv-ease);
+}
+.sv-card:hover .sv-poster img {
+  transform: scale(1.045);
 }
 .sv-poster::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.9) 100%);
+  background: linear-gradient(to top, var(--void) 0%, rgba(13, 13, 13, 0.15) 50%, transparent 100%);
   opacity: 0;
   transition: opacity 0.3s var(--sv-ease);
-}
-.sv-card:hover .sv-poster {
-  transform: translateY(-6px) scale(1.035);
-  box-shadow: 0 20px 38px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 .sv-card:hover .sv-poster::after {
   opacity: 1;
@@ -453,12 +456,10 @@
   z-index: 2;
   padding: 10px;
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.3s var(--sv-ease), transform 0.3s var(--sv-ease);
+  transition: opacity 0.3s var(--sv-ease);
 }
 .sv-card:hover .sv-poster-info {
   opacity: 1;
-  transform: translateY(0);
 }
 .sv-poster-title {
   font-size: 12.5px;

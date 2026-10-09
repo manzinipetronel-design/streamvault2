@@ -108,62 +108,38 @@ export default function MovieRow({
                 key={movie.id}
                 href={`/media/${mediaType}/${movie.id}`}
                 prefetch={false}
-                className={`movie-card group flex-none w-[125px] sm:w-[150px] md:w-[172px] snap-start relative rounded-[8px]${spotlightStyles ? ' sv-card' : ''}`}
+                className="movie-card group flex-none w-[125px] sm:w-[150px] md:w-[172px] snap-start relative rounded-[8px]"
               >
-                {/* Lift + violet glow on hover, on the OUTER wrapper — kept
-                    separate from the inner overflow-hidden poster box below,
-                    since a translateY/scale here needs room to breathe
-                    without clipping against the poster's own rounded
-                    corners/overflow-hidden. This replaces the old
-                    "dark gradient wash over the whole poster" treatment: the
-                    artwork now stays fully bright at rest AND on hover —
-                    only the card's shadow and a slim bottom strip change. */}
-                <div
-                  className={
-                    spotlightStyles
-                      ? 'sv-poster'
-                      : 'relative aspect-[2/3] w-full rounded-[8px] transition-transform duration-300 ease-out group-hover:-translate-y-1.5 group-hover:scale-[1.03] group-hover:shadow-[0_20px_36px_-10px_rgba(123,47,255,0.5)]'
-                  }
-                >
-                  <div className="relative w-full h-full overflow-hidden rounded-[8px] ring-0 ring-violet group-hover:ring-2 transition-[box-shadow] duration-300">
-                    <Image
-                      src={getImageUrl(movie)}
-                      alt={movie.title || movie.name || 'Media Poster'}
-                      fill
-                      sizes="(max-width: 640px) 130px, (max-width: 1024px) 172px, 172px"
-                      className="object-cover rounded-[8px]"
-                    />
+                {/* Same hover as the media page: the poster zooms slightly and a
+                    soft gradient fades in with the details. No lift, no ring,
+                    and nothing dims the neighbouring cards. */}
+                <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[8px] bg-void-2">
+                  <Image
+                    src={getImageUrl(movie)}
+                    alt={movie.title || movie.name || 'Media Poster'}
+                    fill
+                    sizes="(max-width: 640px) 130px, (max-width: 1024px) 172px, 172px"
+                    className="quiet-media object-cover group-hover:scale-[1.045]"
+                  />
 
-                    {showRank && (
-                      <div className="absolute top-2 left-2 flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-md bg-void/70 backdrop-blur-md border border-white/10 font-display font-extrabold text-[12px] text-foreground z-20">
-                        {i + 1}
-                      </div>
-                    )}
+                  {showRank && (
+                    <div className="absolute top-2 left-2 flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-md bg-void/70 backdrop-blur-md border border-white/10 font-display font-extrabold text-[12px] text-foreground z-20">
+                      {i + 1}
+                    </div>
+                  )}
 
-                    {/* Info strip — sits off-canvas below the poster's own
-                        bottom edge (translate-y-full) and slides up to rest
-                        on hover, instead of a wash darkening the art itself.
-                        overflow-hidden on the parent clips it out of view
-                        at rest. */}
-                    <div
-                      className={
-                        spotlightStyles
-                          ? 'sv-poster-info'
-                          : 'absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out bg-void/75 backdrop-blur-md border-t border-white/10 px-3 py-2.5'
-                      }
-                    >
-                      <p className={spotlightStyles ? 'sv-poster-title' : 'font-display font-semibold text-[12.5px] leading-tight text-foreground line-clamp-2'}>
-                        {movie.title || movie.name}
-                      </p>
-                      <div className={spotlightStyles ? 'sv-poster-meta' : 'flex items-center gap-2 text-[11px] text-muted mt-1'}>
-                        <span className={spotlightStyles ? 'sv-rating' : 'flex items-center gap-[3px] text-gold font-semibold'}>
-                          <svg viewBox="0 0 24 24" className="w-[9px] h-[9px] fill-gold">
-                            <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z" />
-                          </svg>
-                          {cleanRating}
-                        </span>
-                        <span>{releaseYear}</span>
-                      </div>
+                  <div className="absolute inset-0 flex flex-col justify-end p-2.5 bg-gradient-to-t from-void via-void/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <p className="font-display font-semibold text-[12.5px] leading-tight text-foreground line-clamp-2">
+                      {movie.title || movie.name}
+                    </p>
+                    <div className="flex items-center gap-2 text-[11px] text-muted mt-1">
+                      <span className="flex items-center gap-[3px] text-gold font-semibold">
+                        <svg viewBox="0 0 24 24" className="w-[9px] h-[9px] fill-gold">
+                          <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z" />
+                        </svg>
+                        {cleanRating}
+                      </span>
+                      <span>{releaseYear}</span>
                     </div>
                   </div>
                 </div>

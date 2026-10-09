@@ -127,15 +127,15 @@ export default function RecentWatchedRow() {
                 key={`${item.media_type}-${item.media_id}`}
                 href={`/media/${item.media_type}/${item.media_id}`}
                 prefetch={false}
-                className="movie-card group/card flex-none w-[130px] sm:w-[155px] md:w-[176px] snap-start relative rounded-[10px] overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
+                className="movie-card group/card flex-none w-[130px] sm:w-[155px] md:w-[176px] snap-start relative rounded-[10px]"
               >
-                <div className="relative aspect-[2/3] w-full overflow-hidden bg-void-2 rounded-[10px] border border-white/[0.07] group-hover/card:border-cyan/40 transition-colors">
+                <div className="relative aspect-[2/3] w-full overflow-hidden bg-void-2 rounded-[10px] border border-white/[0.07]">
                   <Image
                     src={getPoster(item)}
                     alt={item.title || 'Watched Media'}
                     fill
                     sizes="(max-width: 640px) 130px, (max-width: 1024px) 176px, 176px"
-                    className="quiet-media object-cover rounded-[10px]"
+                    className="quiet-media object-cover rounded-[10px] group-hover/card:scale-[1.045]"
                   />
 
                   {/* Top Type / Episode pill */}
@@ -158,7 +158,7 @@ export default function RecentWatchedRow() {
                   </button>
 
                   {/* Center Play glyph on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200">
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity duration-200">
                     <div className="w-10 h-10 rounded-full bg-white/95 text-void flex items-center justify-center shadow-lg transform scale-90 group-hover/card:scale-100 transition-transform duration-200">
                       <svg viewBox="0 0 24 24" className="w-4 h-4 fill-void translate-x-[1px]">
                         <path d="M8 5v14l11-7z" />
@@ -183,7 +183,7 @@ export default function RecentWatchedRow() {
                   )}
 
                   {/* Overlay for metadata */}
-                  <div className="absolute inset-0 flex flex-col justify-end p-3 bg-gradient-to-t from-void via-void/40 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none">
+                  <div className="absolute inset-0 flex flex-col justify-end p-3 bg-gradient-to-t from-void via-void/15 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none">
                     <p className="font-display font-semibold text-[13px] leading-tight text-foreground mb-1 line-clamp-2">
                       {item.title}
                     </p>
@@ -207,7 +207,7 @@ export default function RecentWatchedRow() {
                   </div>
                 </div>
 
-                <p className="font-display font-medium text-[13px] text-foreground mt-1.5 leading-tight line-clamp-1 group-hover/card:text-cyan transition-colors">
+                <p className="font-display font-medium text-[13px] text-foreground mt-1.5 leading-tight line-clamp-1">
                   {item.title}
                 </p>
                 <p className="text-[11px] text-muted leading-tight line-clamp-1 mt-0.5">
