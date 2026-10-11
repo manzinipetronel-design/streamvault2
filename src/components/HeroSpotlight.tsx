@@ -4,10 +4,14 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
-import { Play, Info, Heart, Bookmark, Plus } from 'lucide-react';
+import { Play, Info, Heart, Bookmark, Plus, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
 import { userListsService } from '@/lib/services/userListsService';
+import { getVideos, type TMDBVideo } from '@/lib/services/tmdbService';
 import { genreNames } from '@/lib/genreMap';
+import UpcomingBadge from '@/components/UpcomingBadge';
+import { isUpcomingRelease } from '@/lib/releaseDate';
 
 interface SpotlightItem {
   id: number;
@@ -49,12 +53,35 @@ export default function HeroSpotlight({
   const [isFavorite, setIsFavorite] = useState(false);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [busy, setBusy] = useState<'fav' | 'list' | null>(null);
+  const [trailerResult, setTrailerResult] = useState<{
+    id: number;
+    mediaType: 'movie' | 'tv';
+    videos: TMDBVideo[];
+  } | null>(null);
+  const [activeTrailer, setActiveTrailer] = useState<TMDBVideo | null>(null);
   const { user } = useAuth();
+  const { activeProfile } = useProfile();
 
   const hasItems = items.length > 0;
   const display = hasItems ? items[currentIndex] : mockHero;
   const displayTitle = display.title || display.name || 'Untitled';
   const displayMediaType = display.mediaType || mediaType;
+  const trailers =
+    trailerResult?.id === display.id && trailerResult.mediaType === displayMediaType
+      ? trailerResult.videos
+      : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    getVideos(display.id, displayMediaType).then((videos) => {
+      if (!cancelled) {
+        setTrailerResult({ id: display.id, mediaType: displayMediaType, videos });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [display.id, displayMediaType]);
 
   useEffect(() => {
     if (items.length <= 1) return;
@@ -69,13 +96,13 @@ export default function HeroSpotlight({
   useEffect(() => {
     setIsFavorite(false);
     setIsWatchlisted(false);
-    if (!user?.id) return;
+    if (!user?.id || !activeProfile?.id) return;
     let cancelled = false;
     (async () => {
       const mediaId = String(display.id);
       const [fav, wl] = await Promise.all([
-        userListsService.isFavorite(user.id, mediaId, displayMediaType).catch(() => false),
-        userListsService.isInWatchlist(user.id, mediaId, displayMediaType).catch(() => false),
+        userListsService.isFavorite(user.id, mediaId, displayMediaType, activeProfile.id).catch(() => false),
+        userListsService.isInWatchlist(user.id, mediaId, displayMediaType, activeProfile.id).catch(() => false),
       ]);
       if (!cancelled) {
         setIsFavorite(fav);
@@ -86,7 +113,7 @@ export default function HeroSpotlight({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [display.id, displayMediaType, user?.id]);
+  }, [display.id, displayMediaType, user?.id, activeProfile?.id]);
 
   const backdrop =
     display.backdrop_path && display.backdrop_path !== '/placeholder-hero'
@@ -110,13 +137,13 @@ export default function HeroSpotlight({
   };
 
   const toggleFavorite = async () => {
-    if (!user?.id || busy) return;
+    if (!user?.id || !activeProfile?.id || busy) return;
     setBusy('fav');
     const next = !isFavorite;
     setIsFavorite(next);
     try {
-      if (next) await userListsService.addFavorite(user.id, mediaPayload);
-      else await userListsService.removeFavorite(user.id, mediaPayload.mediaId, displayMediaType);
+      if (next) await userListsService.addFavorite(user.id, mediaPayload, activeProfile.id);
+      else await userListsService.removeFavorite(user.id, mediaPayload.mediaId, displayMediaType, activeProfile.id);
     } catch {
       setIsFavorite(!next);
     } finally {
@@ -125,13 +152,13 @@ export default function HeroSpotlight({
   };
 
   const toggleWatchlist = async () => {
-    if (!user?.id || busy) return;
+    if (!user?.id || !activeProfile?.id || busy) return;
     setBusy('list');
     const next = !isWatchlisted;
     setIsWatchlisted(next);
     try {
-      if (next) await userListsService.addToWatchlist(user.id, mediaPayload);
-      else await userListsService.removeFromWatchlist(user.id, mediaPayload.mediaId, displayMediaType);
+      if (next) await userListsService.addToWatchlist(user.id, mediaPayload, activeProfile.id);
+      else await userListsService.removeFromWatchlist(user.id, mediaPayload.mediaId, displayMediaType, activeProfile.id);
     } catch {
       setIsWatchlisted(!next);
     } finally {
@@ -142,7 +169,7 @@ export default function HeroSpotlight({
   const strip = items.slice(0, 6);
 
   return (
-    <section className={`relative min-h-[640px] overflow-hidden bg-void ${className}`}>
+    <section className={`relative min-h-[min(700px,82svh)] overflow-hidden bg-void md:min-h-[640px] ${className}`}>
       {/* Backdrop */}
       <div className="absolute inset-0 z-0">
         <AnimatePresence>
@@ -161,6 +188,7 @@ export default function HeroSpotlight({
                 fill
                 priority
                 sizes="100vw"
+                quality={90}
                 className="object-cover"
               />
             </motion.div>
@@ -193,8 +221,8 @@ export default function HeroSpotlight({
           natural height below it in normal flow. That way the two can
           never overlap on a short viewport — they just compress toward
           each other instead of the footer punching through the buttons. */}
-      <div className="relative z-20 min-h-[92vh] flex flex-col">
-        <div className="flex-1 flex flex-col justify-center pl-5 pr-5 md:pl-28 md:pr-12 pt-24 pb-6">
+      <div className="relative z-20 min-h-[82svh] flex flex-col md:min-h-[92vh]">
+        <div className="flex-1 flex flex-col justify-center pl-5 pr-5 md:pl-28 md:pr-12 pt-20 pb-3 md:pt-24 md:pb-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={display.id}
@@ -204,18 +232,25 @@ export default function HeroSpotlight({
               transition={{ duration: 0.5, ease: 'easeOut' }}
               className="max-w-[600px]"
             >
-              <div className="flex items-center gap-3 text-[13px] font-medium text-muted mb-4">
-                {formattedDate && <span>{formattedDate}</span>}
-                {formattedDate && genres.length > 0 && <span className="w-1 h-1 rounded-full bg-muted-2" />}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] md:text-[13px] font-medium text-muted mb-3 md:mb-4">
+                <UpcomingBadge
+                  releaseDate={display.release_date || display.first_air_date}
+                  showDate
+                />
+                {formattedDate &&
+                  !isUpcomingRelease(releaseDate) && <span>{formattedDate}</span>}
+                {formattedDate &&
+                  !isUpcomingRelease(releaseDate) &&
+                  genres.length > 0 && <span className="w-1 h-1 rounded-full bg-muted-2" />}
                 {genres.length > 0 && <span className="lowercase">{genres.join(', ')}</span>}
               </div>
 
-              <h1 className="font-display text-4xl sm:text-5xl md:text-[4.5rem] lg:text-[5.25rem] font-extrabold tracking-tight text-foreground leading-[0.92] mb-5 uppercase">
+              <h1 className="font-display text-3xl sm:text-5xl md:text-[4.5rem] lg:text-[5.25rem] font-extrabold tracking-tight text-foreground leading-[0.92] mb-4 md:mb-5 uppercase">
                 {displayTitle}
               </h1>
 
               {display.overview && (
-                <p className="text-[13px] md:text-sm text-muted font-medium line-clamp-2 leading-relaxed mb-7 max-w-[440px]">
+                <p className="text-[12px] md:text-sm text-muted font-medium line-clamp-2 leading-relaxed mb-5 md:mb-7 max-w-[440px]">
                   {display.overview}
                 </p>
               )}
@@ -224,19 +259,38 @@ export default function HeroSpotlight({
                 <Link
                   href={`/media/${displayMediaType}/${display.id}`}
                   prefetch={false}
-                  className="inline-flex items-center gap-2 justify-center px-6 py-3.5 rounded-full text-void font-display font-semibold text-[14px] bg-foreground transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-8px_rgba(255,255,255,0.25)] active:translate-y-0 active:scale-[0.97]"
+                  className="inline-flex items-center gap-2 justify-center px-5 py-3 md:px-6 md:py-3.5 rounded-full text-void font-display font-semibold text-[13px] md:text-[14px] bg-foreground transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-8px_rgba(255,255,255,0.25)] active:translate-y-0 active:scale-[0.97]"
                 >
                   <Play className="w-[14px] h-[14px] fill-void" />
                   Watch now
                 </Link>
-                <Link
-                  href={`/media/${displayMediaType}/${display.id}`}
-                  prefetch={false}
-                  className="inline-flex items-center gap-2 justify-center px-6 py-3.5 rounded-full text-foreground font-display font-semibold text-[14px] bg-white/[0.06] hover:bg-white/[0.12] border border-glass-border hover:border-white/25 backdrop-blur-md transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]"
-                >
-                  <Info className="w-[14px] h-[14px]" />
-                  Trailer
-                </Link>
+                {trailers === null ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-2 justify-center px-5 py-3 md:px-6 md:py-3.5 rounded-full text-foreground/60 font-display font-semibold text-[13px] md:text-[14px] bg-white/[0.06] border border-glass-border backdrop-blur-md"
+                  >
+                    Trailer loading
+                  </button>
+                ) : trailers.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTrailer(trailers[0])}
+                    className="inline-flex items-center gap-2 justify-center px-5 py-3 md:px-6 md:py-3.5 rounded-full text-foreground font-display font-semibold text-[13px] md:text-[14px] bg-white/[0.06] hover:bg-white/[0.12] border border-glass-border hover:border-white/25 backdrop-blur-md transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]"
+                  >
+                    <Play className="w-[14px] h-[14px]" />
+                    Trailer
+                  </button>
+                ) : (
+                  <Link
+                    href={`/media/${displayMediaType}/${display.id}`}
+                    prefetch={false}
+                    className="inline-flex items-center gap-2 justify-center px-5 py-3 md:px-6 md:py-3.5 rounded-full text-foreground font-display font-semibold text-[13px] md:text-[14px] bg-white/[0.06] hover:bg-white/[0.12] border border-glass-border hover:border-white/25 backdrop-blur-md transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97]"
+                  >
+                    <Info className="w-[14px] h-[14px]" />
+                    Details
+                  </Link>
+                )}
               </div>
             </motion.div>
           </AnimatePresence>
@@ -246,7 +300,7 @@ export default function HeroSpotlight({
             both in normal flow so they sit below the text block, never
             over it. Hidden strip on phones where there isn't room above
             the mobile nav bar; actions stay visible everywhere. */}
-        <div className="flex-none flex items-end justify-between gap-4 pl-5 pr-5 md:pl-28 md:pr-12 pb-24 sm:pb-8">
+        <div className="flex-none flex items-end justify-between gap-4 pl-5 pr-5 md:pl-28 md:pr-12 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8">
           <div className="hidden sm:flex flex-col gap-2.5">
             {strip.length > 1 && (
               <div className="flex items-end gap-2.5">
@@ -328,6 +382,41 @@ export default function HeroSpotlight({
           </div>
         </div>
       </div>
+      {activeTrailer && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-6"
+          onClick={() => setActiveTrailer(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeTrailer.name}
+            className="relative w-full max-w-4xl overflow-hidden rounded-lg border border-white/15 bg-black shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <p className="truncate text-sm font-medium text-foreground">{activeTrailer.name}</p>
+              <button
+                type="button"
+                onClick={() => setActiveTrailer(null)}
+                aria-label="Close trailer"
+                className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-foreground/75 transition-colors hover:bg-white/10 hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="aspect-video">
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${activeTrailer.key}?autoplay=1`}
+                title={activeTrailer.name}
+                className="h-full w-full"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -19,6 +19,14 @@ View your app in AI Studio: https://ai.studio/apps/9418e0e4-8f42-4f6f-9569-3aecb
 3. Run the app:
    `npm run dev`
 
+## Tests
+
+Run the focused component and unit tests with:
+
+```bash
+npm test
+```
+
 ## Streamtape Downloads
 
 Add the Streamtape API credentials to `.env.local` (server-only variables):

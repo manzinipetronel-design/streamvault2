@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { EyeOff } from 'lucide-react';
+import UpcomingBadge from '@/components/UpcomingBadge';
+import { useKidsControls } from '@/contexts/KidsControlsContext';
 
 interface Movie {
   id: number;
@@ -34,6 +37,8 @@ interface MovieRowProps {
   viewAllHref?: string;
   /** Optional one-liner shown under the title (e.g. "Top-rated releases from 2020–2029"). */
   subtitle?: string;
+  /** Enables parent controls for titles displayed in Kids mode. */
+  enableKidsControls?: boolean;
 }
 
 export default function MovieRow({
@@ -45,8 +50,18 @@ export default function MovieRow({
   spotlightStyles = false,
   viewAllHref = '/browse',
   subtitle,
+  enableKidsControls = false,
 }: MovieRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const [busyTitle, setBusyTitle] = useState<string | null>(null);
+  const { isHidden, hideTitle, error, loadError, loading: kidsSettingsLoading } = useKidsControls();
+  const kidsSettingsUnavailable = kidsSettingsLoading || loadError;
+  const visibleItems =
+    enableKidsControls && !kidsSettingsUnavailable
+      ? items.filter((movie) => !isHidden(movie.id, mediaType))
+      : enableKidsControls
+        ? []
+        : items;
 
   const getImageUrl = (movie: Movie) => {
     if (isMock && movie.poster_path) return movie.poster_path;
@@ -76,6 +91,13 @@ export default function MovieRow({
       </div>
 
       <div className="relative">
+        {enableKidsControls && kidsSettingsUnavailable && (
+          <p role="status" className="px-4 py-8 text-sm text-muted md:px-0">
+            {kidsSettingsLoading
+              ? 'Loading Kids settings…'
+              : 'Could not load Kids settings. Kids titles are hidden until settings load.'}
+          </p>
+        )}
         {/* glass scroll buttons — fade in on row hover, not always visible */}
         <button
           onClick={() => scrollRow(-1)}
@@ -97,26 +119,31 @@ export default function MovieRow({
           ref={rowRef}
           className="movie-row spotlight-scope flex gap-[14px] overflow-x-auto pb-1 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {items.map((movie, i) => {
+          {visibleItems.map((movie, i) => {
             const releaseYear = (movie.release_date || movie.first_air_date || '2026').split(
               '-'
             )[0];
             const cleanRating = movie.vote_average ? movie.vote_average.toFixed(1) : '7.0';
+            const title = movie.title || movie.name || 'Media Poster';
+            const mediaId = `${mediaType}:${movie.id}`;
 
             return (
-              <Link
+              <div
                 key={movie.id}
-                href={`/media/${mediaType}/${movie.id}`}
-                prefetch={false}
-                className="movie-card group flex-none w-[125px] sm:w-[150px] md:w-[172px] snap-start relative rounded-[8px]"
+                className="group/card relative flex-none w-[125px] snap-start sm:w-[150px] md:w-[172px]"
               >
+                <Link
+                  href={`/media/${mediaType}/${movie.id}`}
+                  prefetch={false}
+                  className="movie-card group block relative rounded-[8px]"
+                >
                 {/* Same hover as the media page: the poster zooms slightly and a
                     soft gradient fades in with the details. No lift, no ring,
                     and nothing dims the neighbouring cards. */}
                 <div className="relative aspect-[2/3] w-full overflow-hidden rounded-[8px] bg-void-2">
                   <Image
                     src={getImageUrl(movie)}
-                    alt={movie.title || movie.name || 'Media Poster'}
+                    alt={title}
                     fill
                     sizes="(max-width: 640px) 130px, (max-width: 1024px) 172px, 172px"
                     className="quiet-media object-cover group-hover:scale-[1.045]"
@@ -128,9 +155,13 @@ export default function MovieRow({
                     </div>
                   )}
 
-                  <div className="absolute inset-0 flex flex-col justify-end p-2.5 bg-gradient-to-t from-void via-void/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="absolute top-2 right-2 z-10">
+                    <UpcomingBadge releaseDate={movie.release_date || movie.first_air_date} />
+                  </div>
+
+                  <div className="absolute inset-0 flex flex-col justify-end p-2.5 bg-gradient-to-t from-void via-void/15 to-transparent opacity-100 transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100">
                     <p className="font-display font-semibold text-[12.5px] leading-tight text-foreground line-clamp-2">
-                      {movie.title || movie.name}
+                      {title}
                     </p>
                     <div className="flex items-center gap-2 text-[11px] text-muted mt-1">
                       <span className="flex items-center gap-[3px] text-gold font-semibold">
@@ -143,7 +174,32 @@ export default function MovieRow({
                     </div>
                   </div>
                 </div>
-              </Link>
+                </Link>
+                {enableKidsControls && (
+                  <button
+                    type="button"
+                    aria-label={`Hide ${title} from Kids`}
+                    title="Hide this title from Kids"
+                    disabled={busyTitle === mediaId}
+                    onClick={async () => {
+                      setBusyTitle(mediaId);
+                      try {
+                        await hideTitle({
+                          media_id: String(movie.id),
+                          media_type: mediaType,
+                          title,
+                          poster_path: movie.poster_path ?? null,
+                        });
+                      } finally {
+                        setBusyTitle(null);
+                      }
+                    }}
+                    className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white opacity-100 backdrop-blur-sm transition hover:bg-rose-600 disabled:opacity-50 md:opacity-0 md:group-hover/card:opacity-100"
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -164,6 +220,11 @@ export default function MovieRow({
           </svg>
         </button>
       </div>
+      {enableKidsControls && error && (
+        <p role="status" className="px-4 pt-2 text-xs text-rose-400 md:px-0">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

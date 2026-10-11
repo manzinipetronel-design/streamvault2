@@ -4,10 +4,12 @@ import { Unbounded } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProfileProvider } from '@/contexts/ProfileContext';
+import { KidsControlsProvider } from '@/contexts/KidsControlsContext';
 import AuthGate from '@/components/AuthGate';
 import ProfileSelectorModal from '@/components/ProfileSelectorModal';
 import { Navigation } from '@/components/Navigation';
 import RouteProgressBar from '@/components/RouteProgressBar';
+import Footer from '@/components/Footer';
 
 const unbounded = Unbounded({
   subsets: ['latin'],
@@ -40,18 +42,21 @@ export default function RootLayout({
       <body className="bg-zinc-950 text-white min-h-screen">
         <AuthProvider>
           <ProfileProvider>
-            <AuthGate>
-              <Suspense fallback={null}>
-                <RouteProgressBar />
-                <Navigation />
-              </Suspense>
-              <ProfileSelectorModal />
-              {/* Full-bleed main: individual pages add safe-area padding around
-                content that would otherwise sit under the floating navigation. */}
-              <main className="pb-20 md:pb-0">
-                {children}
-              </main>
-            </AuthGate>
+            <KidsControlsProvider>
+              <AuthGate>
+                <Suspense fallback={null}>
+                  <RouteProgressBar />
+                  <Navigation />
+                </Suspense>
+                <ProfileSelectorModal />
+                {/* Full-bleed main: individual pages add safe-area padding around
+                  content that would otherwise sit under the floating navigation. */}
+                <main className="pb-20 md:pb-0">
+                  {children}
+                </main>
+                <Footer />
+              </AuthGate>
+            </KidsControlsProvider>
           </ProfileProvider>
         </AuthProvider>
       </body>

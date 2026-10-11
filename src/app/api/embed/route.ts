@@ -1,103 +1,119 @@
 import { NextResponse } from 'next/server';
-import {
-  BlockedRedirectError,
-  embedSecurityHeaders,
-  fetchResolved,
-  guardScript,
-  isAllowedUrl,
-  isIsolatedHost,
-  noticePage,
-  readTextCapped,
-  relayShim,
-  sanitizeHtml,
-} from '@/lib/server/embedProxy';
+import { sanitizeEmbedHtml, buildGuardScript, buildEmbedCsp } from '@/lib/embedShield';
 
-// Embed proxy.
+// "Max shield" embed proxy.
+// Fetches an embed page server-side, strips ad scripts/iframes/pixels (matched
+// by hostname, not by regex-on-URL), injects a guard script that neutralises
+// popups, hijacked links and script redirects, then serves it.
 //
-//  mode=strict (default, what "Clean mode" uses): page is served with a CSP
-//    `sandbox` header and no allow-same-origin, so third-party code can never
-//    touch this site's cookies / storage.
-//
-//  mode=compat (used by sources that refuse to run when sandboxed, e.g.
-//    vidsrc.sh): NO sandbox header. Only served on an isolated host
-//    (EMBED_ISOLATED_HOST) that shares no cookies/storage with the main app.
-//
-// In both modes every HTTP / meta-refresh redirect is resolved server-side:
-// the browser only receives the final cleaned page.
+// SECURITY: the response carries a CSP `sandbox` header WITHOUT allow-same-origin,
+// so third-party code runs in an opaque origin and can never touch this site's
+// cookies / localStorage / Supabase session. See buildEmbedCsp().
+
+const ALLOWED_HOSTS = ['moviesapi.to', 'vidcore.org', 'vidcore.net', 'vidsrc.sh', 'vidsrc2.ru'];
+const MAX_HOPS = 3;
+const MAX_HTML_BYTES = 2_000_000;
+
+function isAllowedHost(host: string) {
+  host = host.toLowerCase();
+  return ALLOWED_HOSTS.some((d) => host === d || host.endsWith('.' + d));
+}
+
+function shieldError(status: number, reason: string) {
+  const body =
+    `<!doctype html><meta charset="utf-8">` +
+    `<body style="margin:0;background:#000;color:#aaa;font:13px system-ui;display:flex;align-items:center;justify-content:center;height:100vh">` +
+    `Max shield unavailable: ${reason}` +
+    `<script>try{parent.postMessage({type:'sv-shield',kind:'proxy-error',status:${status},reason:${JSON.stringify(reason)}},'*')}catch(e){}</script>`;
+  return new NextResponse(body, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': `sandbox allow-scripts; frame-ancestors ${process.env.APP_ORIGIN ?? "'self'"}`,
+    },
+  });
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const target = searchParams.get('url');
-  const compat = searchParams.get('mode') === 'compat';
-  if (!target) return new NextResponse('Missing url', { status: 400 });
+  const hop = Number(searchParams.get('hop') ?? '0') || 0;
+  const host = request.headers.get('host') ?? '';
+  const isolated =
+    !!process.env.EMBED_ISOLATED_HOST && host === process.env.EMBED_ISOLATED_HOST;
+  if (!target) return shieldError(400, 'Missing url');
+  if (hop > MAX_HOPS) return shieldError(508, 'Too many redirects');
 
   let parsed: URL;
   try {
     parsed = new URL(target);
   } catch {
-    return new NextResponse('Invalid url', { status: 400 });
+    return shieldError(400, 'Invalid url');
   }
-  if (!isAllowedUrl(parsed)) {
-    return new NextResponse('Host not allowed', { status: 403 });
-  }
-  if (compat && !isIsolatedHost(request)) {
-    return new NextResponse(
-      'compat mode is only served from an isolated host (set EMBED_ISOLATED_HOST)',
-      { status: 403 }
-    );
-  }
-
-  // Send the same Referer the browser would have sent for a direct iframe:
-  // the page that embeds us (the main site), not the proxy host.
-  let referer = new URL(request.url).origin + '/';
-  try {
-    const r = request.headers.get('referer');
-    if (r) referer = new URL(r).origin + '/';
-  } catch {
-    /* keep default */
+  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
+    return shieldError(403, 'Host not allowed');
   }
 
   try {
-    const { res: upstream, url: finalUrl } = await fetchResolved(parsed, {
+    const upstream = await fetch(parsed.toString(), {
       headers: {
         'User-Agent': request.headers.get('user-agent') ?? 'Mozilla/5.0',
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': request.headers.get('accept-language') ?? 'en-US,en;q=0.9',
-        Referer: referer,
+        Referer: new URL(request.url).origin + '/',
       },
+      redirect: 'manual',
       signal: AbortSignal.timeout(15000),
     });
 
-    const ct = upstream.headers.get('content-type') ?? '';
-    if (!upstream.ok || !ct.includes('text/html')) {
-      return new NextResponse('Upstream not HTML', { status: 502 });
+    if (upstream.status >= 300 && upstream.status < 400) {
+      const loc = upstream.headers.get('location');
+      if (loc) {
+        const next = new URL(loc, parsed);
+        if (next.protocol === 'https:' && isAllowedHost(next.hostname)) {
+          return NextResponse.redirect(
+            new URL(
+              `/api/embed?url=${encodeURIComponent(next.toString())}&hop=${hop + 1}`,
+              request.url
+            )
+          );
+        }
+      }
+      return shieldError(403, 'Upstream redirected somewhere not allowed');
     }
 
-    let html = sanitizeHtml(await readTextCapped(upstream), finalUrl);
+    const ct = upstream.headers.get('content-type') ?? '';
+    if (!upstream.ok || !ct.includes('text/html')) {
+      return shieldError(502, `Upstream returned ${upstream.status} (not HTML)`);
+    }
 
-    // <base> so relative assets still load from the embed's own origin.
-    const inject =
-      `<base href="${finalUrl.origin}/">` +
-      guardScript() +
-      (compat ? relayShim(finalUrl.origin) : '');
-    const HEAD_RE = /<head(?:\s[^>]*)?>/i;
-    html = HEAD_RE.test(html) ? html.replace(HEAD_RE, (m) => m + inject) : inject + html;
+    const raw = await upstream.text();
+    if (raw.length > MAX_HTML_BYTES) return shieldError(502, 'Upstream too large');
+
+    const { html: clean, removed } = sanitizeEmbedHtml(raw, parsed);
+
+    const inject = `<base href="${parsed.origin}/">` + buildGuardScript(parsed.origin);
+    const html = /<head[^>]*>/i.test(clean)
+      ? clean.replace(/<head[^>]*>/i, (m) => m + inject)
+      : inject + clean;
 
     return new NextResponse(html, {
       status: 200,
-      headers: embedSecurityHeaders(compat),
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': buildEmbedCsp(parsed.origin, {
+          isolated,
+          appOrigin: process.env.APP_ORIGIN,
+        }),
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Shield-Removed': String(removed),
+      },
     });
   } catch (err) {
-    if (err instanceof BlockedRedirectError) {
-      // The host tried to bounce us somewhere off the allow-list (an ad, or a
-      // mirror you may want to add via EMBED_EXTRA_ALLOWED_HOSTS).
-      console.warn('[Embed proxy] blocked redirect to', err.target);
-      return new NextResponse(
-        noticePage('This source tried to redirect away and was blocked.<br>Try another source.'),
-        { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
-      );
-    }
     console.error('[Embed proxy] Error:', err);
-    return new NextResponse('Proxy error', { status: 502 });
+    return shieldError(502, 'Could not reach upstream');
   }
 }

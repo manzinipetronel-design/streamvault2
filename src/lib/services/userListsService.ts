@@ -35,11 +35,34 @@ export interface WatchedItem {
 
 const LOCAL_STORAGE_WATCHED_KEY = 'stream_recent_watched_local';
 
-function getLocalWatched(): WatchedItem[] {
+function localWatchedKey(profileId?: string | null) {
+  return profileId ? `${LOCAL_STORAGE_WATCHED_KEY}:${profileId}` : LOCAL_STORAGE_WATCHED_KEY;
+}
+
+export function migrateLegacyWatchedToProfile(profileId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const scopedKey = localWatchedKey(profileId);
+    if (!localStorage.getItem(scopedKey)) {
+      const legacy =
+        localStorage.getItem('recent_watched') ||
+        localStorage.getItem(LOCAL_STORAGE_WATCHED_KEY);
+      if (legacy) localStorage.setItem(scopedKey, legacy);
+    }
+    localStorage.removeItem('recent_watched');
+    localStorage.removeItem(LOCAL_STORAGE_WATCHED_KEY);
+  } catch {
+    // Existing local history remains untouched if browser storage is unavailable.
+  }
+}
+
+function getLocalWatched(profileId?: string | null): WatchedItem[] {
   if (typeof window === 'undefined') return [];
   try {
+    const key = localWatchedKey(profileId);
     const raw =
-      localStorage.getItem('recent_watched') || localStorage.getItem(LOCAL_STORAGE_WATCHED_KEY);
+      localStorage.getItem(key) ||
+      (!profileId ? localStorage.getItem('recent_watched') : null);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -67,12 +90,12 @@ function getLocalWatched(): WatchedItem[] {
   }
 }
 
-function setLocalWatched(items: WatchedItem[]) {
+function setLocalWatched(items: WatchedItem[], profileId?: string | null) {
   if (typeof window === 'undefined') return;
   try {
     const serialized = JSON.stringify(items.slice(0, 50));
-    localStorage.setItem('recent_watched', serialized);
-    localStorage.setItem(LOCAL_STORAGE_WATCHED_KEY, serialized);
+    localStorage.setItem(localWatchedKey(profileId), serialized);
+    if (!profileId) localStorage.setItem('recent_watched', serialized);
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new CustomEvent('recent_watched_updated'));
   } catch {
@@ -101,10 +124,11 @@ function isSchemaError(error: any): boolean {
 
 export const userListsService = {
   // ---- FAVORITES ----
-  async addFavorite(userId: string, media: MediaPayload) {
+  async addFavorite(userId: string, media: MediaPayload, profileId: string) {
     const supabase = createClient();
     const { error } = await supabase.from('user_favorites').insert({
       user_id: userId,
+      profile_id: profileId,
       media_id: media.mediaId,
       media_type: media.mediaType === 'episode' ? 'tv' : media.mediaType,
       title: media.title,
@@ -117,24 +141,26 @@ export const userListsService = {
     return !error;
   },
 
-  async removeFavorite(userId: string, mediaId: string, mediaType: string) {
+  async removeFavorite(userId: string, mediaId: string, mediaType: string, profileId: string) {
     const supabase = createClient();
     const { error } = await supabase
       .from('user_favorites')
       .delete()
       .eq('user_id', userId)
+      .eq('profile_id', profileId)
       .eq('media_id', mediaId)
       .eq('media_type', mediaType);
     if (error && isSchemaError(error)) throw error;
     return !error;
   },
 
-  async isFavorite(userId: string, mediaId: string, mediaType: string): Promise<boolean> {
+  async isFavorite(userId: string, mediaId: string, mediaType: string, profileId: string): Promise<boolean> {
     const supabase = createClient();
     const { data } = await supabase
       .from('user_favorites')
       .select('id')
       .eq('user_id', userId)
+      .eq('profile_id', profileId)
       .eq('media_id', mediaId)
       .eq('media_type', mediaType)
       .maybeSingle();
@@ -142,10 +168,11 @@ export const userListsService = {
   },
 
   // ---- WATCHLIST ----
-  async addToWatchlist(userId: string, media: MediaPayload) {
+  async addToWatchlist(userId: string, media: MediaPayload, profileId: string) {
     const supabase = createClient();
     const { error } = await supabase.from('user_watchlist').insert({
       user_id: userId,
+      profile_id: profileId,
       media_id: media.mediaId,
       media_type: media.mediaType === 'episode' ? 'tv' : media.mediaType,
       title: media.title,
@@ -158,24 +185,26 @@ export const userListsService = {
     return !error;
   },
 
-  async removeFromWatchlist(userId: string, mediaId: string, mediaType: string) {
+  async removeFromWatchlist(userId: string, mediaId: string, mediaType: string, profileId: string) {
     const supabase = createClient();
     const { error } = await supabase
       .from('user_watchlist')
       .delete()
       .eq('user_id', userId)
+      .eq('profile_id', profileId)
       .eq('media_id', mediaId)
       .eq('media_type', mediaType);
     if (error && isSchemaError(error)) throw error;
     return !error;
   },
 
-  async isInWatchlist(userId: string, mediaId: string, mediaType: string): Promise<boolean> {
+  async isInWatchlist(userId: string, mediaId: string, mediaType: string, profileId: string): Promise<boolean> {
     const supabase = createClient();
     const { data } = await supabase
       .from('user_watchlist')
       .select('id')
       .eq('user_id', userId)
+      .eq('profile_id', profileId)
       .eq('media_id', mediaId)
       .eq('media_type', mediaType)
       .maybeSingle();
@@ -183,11 +212,12 @@ export const userListsService = {
   },
 
   // ---- RATINGS ----
-  async rateMedia(userId: string, media: MediaPayload, userRating: number) {
+  async rateMedia(userId: string, media: MediaPayload, userRating: number, profileId: string) {
     const supabase = createClient();
     const { error } = await supabase.from('user_ratings').upsert(
       {
         user_id: userId,
+        profile_id: profileId,
         media_id: media.mediaId,
         media_type: media.mediaType,
         title: media.title,
@@ -197,18 +227,19 @@ export const userListsService = {
         rating: media.rating || '',
         user_rating: userRating,
       },
-      { onConflict: 'user_id,media_id,media_type' }
+      { onConflict: 'user_id,profile_id,media_id,media_type' }
     );
     if (error && isSchemaError(error)) throw error;
     return !error;
   },
 
-  async getUserRating(userId: string, mediaId: string, mediaType: string): Promise<number | null> {
+  async getUserRating(userId: string, mediaId: string, mediaType: string, profileId: string): Promise<number | null> {
     const supabase = createClient();
     const { data } = await supabase
       .from('user_ratings')
       .select('user_rating')
       .eq('user_id', userId)
+      .eq('profile_id', profileId)
       .eq('media_id', mediaId)
       .eq('media_type', mediaType)
       .maybeSingle();
@@ -217,12 +248,18 @@ export const userListsService = {
 
   // ---- RECENT WATCHED / CONTINUE WATCHING ----
   // Supports both logged-in users (syncs with Supabase table) and guest/unauthenticated users (localStorage).
-  async recordWatched(media: MediaPayload, userId?: string | null): Promise<boolean> {
+  async recordWatched(
+    media: MediaPayload,
+    userId?: string | null,
+    profileId?: string | null,
+  ): Promise<boolean> {
+    if (userId && !profileId) return false;
+
     const now = new Date().toISOString();
     const mediaTypeClean = media.mediaType === 'episode' ? 'tv' : media.mediaType;
 
     // 1. Always save to local storage so guests and offline users have immediate history
-    const local = getLocalWatched();
+    const local = getLocalWatched(profileId);
     const existingIdx = local.findIndex(
       (item) => String(item.media_id) === String(media.mediaId) && item.media_type === mediaTypeClean
     );
@@ -248,19 +285,20 @@ export const userListsService = {
         (item) => !(String(item.media_id) === String(media.mediaId) && item.media_type === mediaTypeClean)
       ),
     ];
-    setLocalWatched(nextLocal);
+    setLocalWatched(nextLocal, profileId)
 
     // 2. If user is logged in, sync to Supabase table
     if (userId) {
       try {
         const supabase = createClient();
-        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history'];
+        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history', 'user_history'];
         let saved = false;
 
         for (const tbl of candidateTables) {
           try {
             const payload: any = {
               user_id: userId,
+              profile_id: profileId,
               media_id: String(media.mediaId),
               media_type: mediaTypeClean,
               title: media.title,
@@ -274,7 +312,7 @@ export const userListsService = {
             if (media.episode !== undefined) payload.episode = media.episode;
 
             const { error } = await supabase.from(tbl).upsert(payload, {
-              onConflict: 'user_id,media_id,media_type',
+              onConflict: 'user_id,profile_id,media_id,media_type',
             });
 
             if (!error) {
@@ -289,6 +327,7 @@ export const userListsService = {
                 .from(tbl)
                 .delete()
                 .eq('user_id', userId)
+                .eq('profile_id', profileId)
                 .eq('media_id', String(media.mediaId));
               const { error: insertErr } = await supabase.from(tbl).insert(payload);
               if (!insertErr) {
@@ -310,8 +349,13 @@ export const userListsService = {
     return true;
   },
 
-  async getRecentWatched(userId?: string | null, limitCount: number = 15): Promise<WatchedItem[]> {
-    const localItems = getLocalWatched();
+  async getRecentWatched(
+    userId?: string | null,
+    profileId?: string | null,
+    limitCount: number = 15,
+  ): Promise<WatchedItem[]> {
+    if (userId && !profileId) return [];
+    const localItems = getLocalWatched(profileId);
 
     if (!userId) {
       return localItems.slice(0, limitCount);
@@ -320,7 +364,7 @@ export const userListsService = {
     // Try fetching from Supabase
     try {
       const supabase = createClient();
-      const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history'];
+      const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history', 'user_history'];
 
       for (const tbl of candidateTables) {
         try {
@@ -328,6 +372,7 @@ export const userListsService = {
             .from(tbl)
             .select('*')
             .eq('user_id', userId)
+            .eq('profile_id', profileId)
             .order('updated_at', { ascending: false })
             .limit(limitCount);
 
@@ -376,20 +421,30 @@ export const userListsService = {
     return localItems.slice(0, limitCount);
   },
 
-  async getWatchedDetail(mediaId: string, mediaType: string, userId?: string | null): Promise<WatchedItem | null> {
-    const list = await this.getRecentWatched(userId, 50);
+  async getWatchedDetail(
+    mediaId: string,
+    mediaType: string,
+    userId?: string | null,
+    profileId?: string | null,
+  ): Promise<WatchedItem | null> {
+    const list = await this.getRecentWatched(userId, profileId, 50);
     return list.find((item) => String(item.media_id) === String(mediaId) && item.media_type === (mediaType === 'episode' ? 'tv' : mediaType)) || null;
   },
 
-  async clearRecentWatched(userId?: string | null): Promise<boolean> {
-    setLocalWatched([]);
+  async clearRecentWatched(userId?: string | null, profileId?: string | null): Promise<boolean> {
+    if (userId && !profileId) return false;
+    setLocalWatched([], profileId);
     if (userId) {
       try {
         const supabase = createClient();
-        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history'];
+        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history', 'user_history'];
         for (const tbl of candidateTables) {
           try {
-            await supabase.from(tbl).delete().eq('user_id', userId);
+            await supabase
+              .from(tbl)
+              .delete()
+              .eq('user_id', userId)
+              .eq('profile_id', profileId);
           } catch {
             // silent
           }
@@ -401,25 +456,32 @@ export const userListsService = {
     return true;
   },
 
-  async removeRecentWatched(mediaId: string, mediaType: string, userId?: string | null): Promise<boolean> {
+  async removeRecentWatched(
+    mediaId: string,
+    mediaType: string,
+    userId?: string | null,
+    profileId?: string | null,
+  ): Promise<boolean> {
+    if (userId && !profileId) return false;
     // 1. Remove from local storage
-    const local = getLocalWatched();
+    const local = getLocalWatched(profileId);
     const filtered = local.filter(
       (item) => !(String(item.media_id) === String(mediaId) && item.media_type === mediaType)
     );
-    setLocalWatched(filtered);
+    setLocalWatched(filtered, profileId);
 
     // 2. Remove from Supabase if user is logged in
     if (userId) {
       try {
         const supabase = createClient();
-        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history'];
+        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history', 'user_history'];
         for (const tbl of candidateTables) {
           try {
             await supabase
               .from(tbl)
               .delete()
               .eq('user_id', userId)
+              .eq('profile_id', profileId)
               .eq('media_id', String(mediaId));
           } catch {
             // silent
@@ -446,6 +508,7 @@ export async function updateWatchProgress({
   duration,
   seasonNumber,
   episodeNumber,
+  profileId,
 }: {
   mediaId: string | number;
   mediaType: 'movie' | 'tv';
@@ -455,22 +518,10 @@ export async function updateWatchProgress({
   duration: number; // in seconds
   seasonNumber?: number;
   episodeNumber?: number;
+  profileId?: string | null;
 }) {
   const resolvedPoster = posterPath || '';
   const now = new Date().toISOString();
-
-  // 1. Save to Local Storage for guest/unauthenticated users
-  let localHistory: any[] = [];
-  try {
-    const raw =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('recent_watched') || localStorage.getItem('stream_recent_watched_local') || '[]'
-        : '[]';
-    localHistory = JSON.parse(raw);
-    if (!Array.isArray(localHistory)) localHistory = [];
-  } catch {
-    localHistory = [];
-  }
 
   const updatedItem: WatchedItem = {
     id: String(mediaId),
@@ -489,19 +540,14 @@ export async function updateWatchProgress({
     created_at: now,
   };
 
-  const filteredHistory = localHistory.filter((item: any) => String(item.media_id) !== String(mediaId));
-  const newHistory = [updatedItem, ...filteredHistory].slice(0, 50);
-
+  const localHistory = getLocalWatched(profileId);
+  const newHistory = [
+    updatedItem,
+    ...localHistory.filter((item) => String(item.media_id) !== String(mediaId)),
+  ];
+  setLocalWatched(newHistory, profileId);
   if (typeof window !== 'undefined') {
-    try {
-      const serialized = JSON.stringify(newHistory);
-      localStorage.setItem('recent_watched', serialized);
-      localStorage.setItem('stream_recent_watched_local', serialized);
-      window.dispatchEvent(new CustomEvent('recent_watched_updated', { detail: updatedItem }));
-      window.dispatchEvent(new Event('storage'));
-    } catch {
-      /* silent */
-    }
+    window.dispatchEvent(new CustomEvent('recent_watched_updated', { detail: updatedItem }));
   }
 
   // 2. Save/Upsert to Supabase if logged in
@@ -515,6 +561,7 @@ export async function updateWatchProgress({
       if (user) {
         const payload: any = {
           user_id: user.id,
+          profile_id: profileId,
           media_id: String(mediaId),
           media_type: mediaType,
           title,
@@ -533,18 +580,13 @@ export async function updateWatchProgress({
           payload.episode = episodeNumber;
         }
 
-        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history'];
+        const candidateTables = ['recent_watched', 'user_watched', 'recently_watched', 'watch_history', 'user_history'];
         for (const tbl of candidateTables) {
           try {
             const { error } = await supabase.from(tbl).upsert(payload, {
-              onConflict: 'user_id, media_id',
+              onConflict: 'user_id,profile_id,media_id,media_type',
             });
             if (!error) break;
-
-            const { error: err2 } = await supabase.from(tbl).upsert(payload, {
-              onConflict: 'user_id,media_id,media_type',
-            });
-            if (!err2) break;
           } catch {
             // Check next candidate table
           }

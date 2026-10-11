@@ -45,6 +45,26 @@ function setStoredUser(user: any) {
   }
 }
 
+async function hashMockPin(pin: string, salt: Uint8Array<ArrayBuffer>) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(pin),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const digest = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 },
+    key,
+    256
+  );
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(hex.match(/.{2}/g)?.map((byte) => parseInt(byte, 16)) ?? []);
+}
+
 function createMockSupabaseClient() {
   return {
     auth: {
@@ -108,11 +128,65 @@ function createMockSupabaseClient() {
         return { data: { user }, error: null };
       },
     },
+    async rpc(functionName: string, args: Record<string, string> = {}) {
+      const userId = getStoredUser()?.id;
+      if (!userId) return { data: null, error: new Error('Authentication required') };
+
+      const controls = getStorage('kids_parental_controls');
+      const saved = controls.find((row) => row.user_id === userId);
+      if (functionName === 'has_kids_pin') {
+        return { data: Boolean(saved), error: null };
+      }
+      if (functionName === 'set_kids_pin') {
+        if (saved) {
+          return { data: null, error: new Error('A parental PIN is already configured') };
+        }
+        const pin = args.p_pin;
+        if (!/^\d{4,6}$/.test(pin ?? '')) {
+          return { data: null, error: new Error('PIN must contain 4 to 6 digits') };
+        }
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const saltHex = Array.from(salt, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        const pinHash = await hashMockPin(pin, salt);
+        const next = controls.filter((row) => row.user_id !== userId);
+        next.push({ user_id: userId, pin_salt: saltHex, pin_hash: pinHash });
+        setStorage('kids_parental_controls', next);
+        return { data: null, error: null };
+      }
+      if (functionName === 'change_kids_pin') {
+        const currentPin = args.p_current_pin;
+        const newPin = args.p_new_pin;
+        if (!saved || !/^\d{4,6}$/.test(currentPin ?? '') || !/^\d{4,6}$/.test(newPin ?? '')) {
+          return { data: null, error: new Error('Current and new PINs must contain 4 to 6 digits') };
+        }
+        const currentHash = await hashMockPin(currentPin, hexToBytes(saved.pin_salt));
+        if (currentHash !== saved.pin_hash) {
+          return { data: null, error: new Error('Current PIN is incorrect') };
+        }
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const saltHex = Array.from(salt, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        const pinHash = await hashMockPin(newPin, salt);
+        const next = controls.map((row) =>
+          row.user_id === userId ? { ...row, pin_salt: saltHex, pin_hash: pinHash } : row
+        );
+        setStorage('kids_parental_controls', next);
+        return { data: null, error: null };
+      }
+      if (functionName === 'verify_kids_pin') {
+        const pin = args.p_pin;
+        if (!saved || !/^\d{4,6}$/.test(pin ?? '')) return { data: false, error: null };
+        const actual = await hashMockPin(pin, hexToBytes(saved.pin_salt));
+        return { data: actual === saved.pin_hash, error: null };
+      }
+      return { data: null, error: new Error(`Unsupported mock RPC: ${functionName}`) };
+    },
     from(tableName: string) {
       const filters: Array<(row: any) => boolean> = [];
       let orderByCol: string | null = null;
       let orderAsc = true;
       let limitCount: number | null = null;
+      let updateValues: Record<string, any> | null = null;
+      let deleteRequested = false;
 
       const chain: any = {
         select() {
@@ -157,7 +231,8 @@ function createMockSupabaseClient() {
                 (r.user_id &&
                   item.user_id &&
                   r.user_id === item.user_id &&
-                  r.media_id === item.media_id) ||
+                  r.media_id === item.media_id &&
+                  (!item.media_type || r.media_type === item.media_type)) ||
                 (r.id && item.id && r.id === item.id)
             );
             if (idx >= 0) {
@@ -172,11 +247,13 @@ function createMockSupabaseClient() {
           setStorage(tableName, current);
           return { data: rows[0], error: null };
         },
-        async delete() {
-          const current = getStorage(tableName);
-          const remaining = current.filter((r) => !filters.every((f) => f(r)));
-          setStorage(tableName, remaining);
-          return { data: null, error: null };
+        update(values: Record<string, any>) {
+          updateValues = values;
+          return chain;
+        },
+        delete() {
+          deleteRequested = true;
+          return chain;
         },
         async maybeSingle() {
           const current = getStorage(tableName);
@@ -189,7 +266,22 @@ function createMockSupabaseClient() {
           return { data: matched[0] || null, error: null };
         },
         then(onfulfilled: any, onrejected?: any) {
-          let rows = getStorage(tableName).filter((r) => filters.every((f) => f(r)));
+          let rows = getStorage(tableName);
+          if (deleteRequested) {
+            const removed = rows.filter((row) => filters.every((filter) => filter(row)));
+            rows = rows.filter((row) => !filters.every((filter) => filter(row)));
+            setStorage(tableName, rows);
+            rows = removed;
+            deleteRequested = false;
+          }
+          if (updateValues) {
+            rows = rows.map((row) =>
+              filters.every((filter) => filter(row)) ? { ...row, ...updateValues } : row
+            );
+            setStorage(tableName, rows);
+            updateValues = null;
+          }
+          rows = rows.filter((r) => filters.every((f) => f(r)));
           if (orderByCol) {
             rows.sort((a, b) => {
               const va = a[orderByCol!];

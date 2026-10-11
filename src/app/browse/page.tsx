@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import MovieRow from '@/components/MovieRow';
+import KidsCatalog from '@/components/KidsCatalog';
 import HeaderAvatar from '@/components/HeaderAvatar';
+import { getIsKidsProfile } from '@/lib/profileAccess';
 import {
   getGenreTiles,
   getEraRows,
@@ -107,7 +109,7 @@ function MoodPanel({ tile }: { tile: TMDBGenreTile }) {
   const bg = tile.posters.length > 0 ? tile.posters : ['', '', ''];
   return (
     <Link
-      href={`/browse/catalog?genre=${tile.id}&name=${encodeURIComponent(tile.name)}`}
+      href={`/browse/catalog?genre=${tile.id}&type=movie&name=${encodeURIComponent(tile.name)}`}
       className="group relative flex-1 min-w-16 rounded-2xl overflow-hidden transition-[flex-grow] duration-500 ease-out hover:flex-[5] bg-void-2"
     >
       {/* poster collage background — quiet/grayscale at rest, revealed on hover */}
@@ -148,6 +150,9 @@ function MoodPanel({ tile }: { tile: TMDBGenreTile }) {
 }
 
 export default async function BrowsePage() {
+  const isKidsMode = await getIsKidsProfile();
+  if (isKidsMode) return <KidsCatalog page="browse" />;
+
   const [genres, eras, collections, networkLogos, studioLogos] = await Promise.all([
     getGenreTiles(),
     getEraRows(),
@@ -248,6 +253,7 @@ export default async function BrowsePage() {
               <MovieRow
                 title={era.title}
                 subtitle={era.subtitle}
+                viewAllHref={`/browse/catalog?era=${era.key}&name=${encodeURIComponent(era.title)}`}
                 items={era.items.map((m) => ({
                   id: m.id,
                   title: m.title,

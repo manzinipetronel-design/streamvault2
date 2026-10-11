@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Search, X, Film, Tv, Star, Loader2 } from 'lucide-react';
+import UpcomingBadge from '@/components/UpcomingBadge';
 
 export interface SearchResult {
   id: number | string;
@@ -171,9 +172,12 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose })
                   className="w-12 h-16 object-cover rounded-md flex-none bg-zinc-800"
                 />
                 <div className="flex-grow min-w-0">
-                  <h4 className="text-sm font-semibold text-white group-hover:text-violet-400 transition-colors truncate">
-                    {item.title}
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-white group-hover:text-violet-400 transition-colors truncate">
+                      {item.title}
+                    </h4>
+                    <UpcomingBadge releaseDate={item.release_date || item.first_air_date} />
+                  </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-zinc-400">
                     <span className="uppercase text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
                       {item.media_type}

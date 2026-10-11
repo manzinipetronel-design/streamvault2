@@ -66,20 +66,16 @@ export const Header: React.FC = () => {
             <Link
               href="/browse"
               prefetch={false}
-              className="text-sm font-medium transition-colors duration-200"
+              className="text-sm font-medium transition-colors duration-200 hover:text-cyan-400"
               style={{ color: 'rgba(240,240,240,0.55)', textDecoration: 'none' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#00E5FF')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(240,240,240,0.55)')}
             >
               Browse
             </Link>
             <Link
               href="/lists"
               prefetch={false}
-              className="text-sm font-medium transition-colors duration-200"
+              className="text-sm font-medium transition-colors duration-200 hover:text-cyan-400"
               style={{ color: 'rgba(240,240,240,0.55)', textDecoration: 'none' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#00E5FF')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(240,240,240,0.55)')}
             >
               My Lists
             </Link>
@@ -146,18 +142,8 @@ export const Header: React.FC = () => {
                               href={item.href}
                               prefetch={false}
                               onClick={() => setMenuOpen(false)}
-                              className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150"
+                              className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-violet-500/15 hover:text-white"
                               style={{ color: 'rgba(240,240,240,0.7)', textDecoration: 'none' }}
-                              onMouseEnter={(e) => {
-                                (e.currentTarget as HTMLElement).style.background =
-                                  'rgba(123,47,255,0.15)';
-                                (e.currentTarget as HTMLElement).style.color = '#F0F0F0';
-                              }}
-                              onMouseLeave={(e) => {
-                                (e.currentTarget as HTMLElement).style.background = 'transparent';
-                                (e.currentTarget as HTMLElement).style.color =
-                                  'rgba(240,240,240,0.7)';
-                              }}
                             >
                               <span>{item.icon}</span>
                               <span>{item.label}</span>
@@ -171,20 +157,12 @@ export const Header: React.FC = () => {
                   <Link
                     href="/login"
                     prefetch={false}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 hover:shadow-[0_0_30px_rgba(123,47,255,0.7),0_0_50px_rgba(0,229,255,0.2)]"
                     style={{
                       background: 'linear-gradient(135deg, #7B2FFF, #9B5FFF)',
                       color: '#fff',
                       boxShadow: '0 0 20px rgba(123,47,255,0.4)',
                       textDecoration: 'none',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.boxShadow =
-                        '0 0 30px rgba(123,47,255,0.7), 0 0 50px rgba(0,229,255,0.2)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.boxShadow =
-                        '0 0 20px rgba(123,47,255,0.4)';
                     }}
                   >
                     Sign In

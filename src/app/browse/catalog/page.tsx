@@ -1,28 +1,89 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import CatalogGrid from '@/components/CatalogGrid';
 import HeaderAvatar from '@/components/HeaderAvatar';
-import { getMoviesByProvider, getMoviesByCompany, getMoviesByGenre } from '@/lib/services/tmdbService';
+import { getIsKidsProfile } from '@/lib/profileAccess';
+import {
+  getMoviesByProvider,
+  getMoviesByCompany,
+  getMoviesByGenre,
+  getMovieOnlyByGenre,
+  getSeriesByGenre,
+  getCatalogCollection,
+  getMoviesByEra,
+  getKidsCatalog,
+  KIDS_CATALOGS,
+  type TMDBCatalogCollection,
+  type TMDBEraKey,
+  type TMDBKidsCollection,
+} from '@/lib/services/tmdbService';
 
 interface PageProps {
-  searchParams: Promise<{ provider?: string; company?: string; genre?: string; name?: string }>;
+  searchParams: Promise<{
+    provider?: string;
+    company?: string;
+    genre?: string;
+    type?: string;
+    collection?: string;
+    era?: string;
+    kids?: string;
+    name?: string;
+  }>;
 }
 
 export default async function CatalogPage({ searchParams }: PageProps) {
-  const { provider, company, genre, name } = await searchParams;
+  const { provider, company, genre, type, collection, era, kids, name } = await searchParams;
+  const isKidsMode = await getIsKidsProfile();
+  const kidsCollection = Object.keys(KIDS_CATALOGS).find((item) => item === kids) as
+    | TMDBKidsCollection
+    | undefined;
+  if (isKidsMode && !kidsCollection) {
+    redirect('/browse/catalog?kids=all-movies');
+  }
 
   const providerId = provider ? Number(provider) : null;
   const companyId = company ? Number(company) : null;
   const genreId = genre ? Number(genre) : null;
-  const label = name || (providerId ? 'This service' : companyId ? 'This studio' : 'This category');
+  const mediaType = type === 'movie' || type === 'tv' ? type : undefined;
+  const catalogCollections: TMDBCatalogCollection[] = [
+    'trending-movies',
+    'trending-tv',
+    'popular-movies',
+    'popular-tv',
+    'upcoming-movies',
+    'now-playing-movies',
+  ];
+  const catalogCollection = catalogCollections.find((item) => item === collection);
+  const eraKeys: TMDBEraKey[] = ['2020s', '2010s', '2000s', 'pre2000'];
+  const eraKey = eraKeys.find((item) => item === era);
+  const collectionLabel = catalogCollection
+    ?.split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+  const label =
+    (kidsCollection && KIDS_CATALOGS[kidsCollection].title) ||
+    name ||
+    collectionLabel ||
+    (providerId ? 'This service' : companyId ? 'This studio' : 'This category');
 
   const result =
-    providerId != null
+    kidsCollection
+      ? await getKidsCatalog(kidsCollection)
+      : providerId != null
       ? await getMoviesByProvider(providerId)
       : companyId != null
         ? await getMoviesByCompany(companyId)
         : genreId != null
-          ? await getMoviesByGenre(genreId)
-          : { items: [], totalResults: 0, totalPages: 1 };
+          ? mediaType === 'movie'
+            ? await getMovieOnlyByGenre(genreId)
+            : mediaType === 'tv'
+              ? await getSeriesByGenre(genreId)
+              : await getMoviesByGenre(genreId)
+          : catalogCollection
+            ? await getCatalogCollection(catalogCollection)
+            : eraKey
+              ? await getMoviesByEra(eraKey)
+            : { items: [], totalResults: 0, totalPages: 1 };
 
   return (
     <div className="page-enter min-h-screen bg-void text-foreground overflow-x-hidden font-sans antialiased selection:bg-violet selection:text-white pb-24">
@@ -77,7 +138,19 @@ export default async function CatalogPage({ searchParams }: PageProps) {
             : 'No titles found for this catalog.'}
         </p>
 
-        <CatalogGrid items={result.items} providerId={providerId} companyId={companyId} genreId={genreId} />
+        <CatalogGrid
+          key={[providerId, companyId, genreId, mediaType, catalogCollection, eraKey, kidsCollection].join(':')}
+          items={result.items}
+          providerId={providerId}
+          companyId={companyId}
+          genreId={genreId}
+          mediaType={mediaType}
+          collection={catalogCollection}
+          era={eraKey}
+          kidsCollection={kidsCollection}
+          totalResults={result.totalResults}
+          totalPages={result.totalPages}
+        />
       </main>
     </div>
   );

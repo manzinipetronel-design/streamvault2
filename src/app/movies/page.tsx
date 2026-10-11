@@ -1,6 +1,8 @@
 import HeaderAvatar from '@/components/HeaderAvatar';
+import KidsCatalog from '@/components/KidsCatalog';
 import GenreBrowser, { RowSection } from '@/components/GenreBrowser';
 import FeaturedBanner from '@/components/FeaturedBanner';
+import { getIsKidsProfile } from '@/lib/profileAccess';
 
 const MOVIE_CHIP_GENRES = [
   { id: 28, label: 'Action' },
@@ -77,6 +79,8 @@ async function fetchMovies(genreId?: number, endpoint?: string) {
 }
 
 export default async function MoviesPage() {
+  if (await getIsKidsProfile()) return <KidsCatalog page="movies" />;
+
   let popular: any[] = [];
   let action: any[] = [];
   let scifi: any[] = [];
@@ -99,10 +103,10 @@ export default async function MoviesPage() {
     comedy.length > 0 ? comedy : mockMovies.map((m) => ({ ...m, id: m.id + 300 }));
 
   const sections: RowSection[] = [
-    { title: 'Popular Movies', items: popularItems, isMock: popularItems === mockMovies, showRank: true, viewAllHref: '/new' },
-    { title: 'Action & Adventure', items: actionItems, isMock: actionItems.length > 0 && actionItems[0].id > 100 && actionItems[0].id < 210, viewAllHref: '/browse/catalog?genre=28&name=Action%20%26%20Adventure' },
-    { title: 'Sci-Fi & Fantasy', items: scifiItems, isMock: scifiItems.length > 0 && scifiItems[0].id > 200 && scifiItems[0].id < 310, viewAllHref: '/browse/catalog?genre=878&name=Sci-Fi%20%26%20Fantasy' },
-    { title: 'Comedy Hits', items: comedyItems, isMock: comedyItems.length > 0 && comedyItems[0].id > 300 && comedyItems[0].id < 410, viewAllHref: '/browse/catalog?genre=35&name=Comedy%20Hits' },
+    { title: 'Popular Movies', items: popularItems, isMock: popularItems === mockMovies, showRank: true, viewAllHref: '/browse/catalog?collection=popular-movies&name=Popular%20Movies' },
+    { title: 'Action & Adventure', items: actionItems, isMock: actionItems.length > 0 && actionItems[0].id > 100 && actionItems[0].id < 210, viewAllHref: '/browse/catalog?genre=28&type=movie&name=Action%20%26%20Adventure' },
+    { title: 'Sci-Fi & Fantasy', items: scifiItems, isMock: scifiItems.length > 0 && scifiItems[0].id > 200 && scifiItems[0].id < 310, viewAllHref: '/browse/catalog?genre=878&type=movie&name=Sci-Fi%20%26%20Fantasy' },
+    { title: 'Comedy Hits', items: comedyItems, isMock: comedyItems.length > 0 && comedyItems[0].id > 300 && comedyItems[0].id < 410, viewAllHref: '/browse/catalog?genre=35&type=movie&name=Comedy%20Hits' },
   ];
 
   return (

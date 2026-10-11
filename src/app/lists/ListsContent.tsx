@@ -3,10 +3,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
 import { createClient } from '@/lib/supabase/client';
 import { userListsService } from '@/lib/services/userListsService';
 import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import AppImage from '@/components/ui/AppImage';
 
 interface MediaItem {
@@ -41,6 +41,7 @@ export default function ListsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
+  const { activeProfile } = useProfile();
 
   const initialTab = (searchParams?.get('tab') as TabKey) || 'history';
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
@@ -59,8 +60,17 @@ export default function ListsContent() {
     try {
       let data: MediaItem[] = [];
 
+      if (user?.id && !activeProfile?.id) {
+        setItems([]);
+        return;
+      }
+
       if (activeTab === 'history') {
-        const watched = await userListsService.getRecentWatched(user?.id, 50);
+        const watched = await userListsService.getRecentWatched(
+          user?.id,
+          activeProfile?.id,
+          50,
+        );
         data = watched.map((w) => ({
           id: w.id,
           media_id: w.media_id,
@@ -76,13 +86,14 @@ export default function ListsContent() {
           duration: w.duration,
           created_at: w.updated_at || w.created_at || new Date().toISOString(),
         }));
-      } else if (user) {
+      } else if (user && activeProfile?.id) {
         const supabase = createClient();
         if (activeTab === 'favorites') {
           const { data: rows, error } = await supabase
             .from('user_favorites')
             .select('*')
             .eq('user_id', user.id)
+            .eq('profile_id', activeProfile.id)
             .order('created_at', { ascending: false });
           if (!error) data = rows || [];
         } else if (activeTab === 'watchlist') {
@@ -90,6 +101,7 @@ export default function ListsContent() {
             .from('user_watchlist')
             .select('*')
             .eq('user_id', user.id)
+            .eq('profile_id', activeProfile.id)
             .order('created_at', { ascending: false });
           if (!error) data = rows || [];
         } else if (activeTab === 'rated-movies') {
@@ -97,6 +109,7 @@ export default function ListsContent() {
             .from('user_ratings')
             .select('*')
             .eq('user_id', user.id)
+            .eq('profile_id', activeProfile.id)
             .eq('media_type', 'movie')
             .order('created_at', { ascending: false });
           if (!error) data = rows || [];
@@ -105,6 +118,7 @@ export default function ListsContent() {
             .from('user_ratings')
             .select('*')
             .eq('user_id', user.id)
+            .eq('profile_id', activeProfile.id)
             .eq('media_type', 'tv')
             .order('created_at', { ascending: false });
           if (!error) data = rows || [];
@@ -113,6 +127,7 @@ export default function ListsContent() {
             .from('user_ratings')
             .select('*')
             .eq('user_id', user.id)
+            .eq('profile_id', activeProfile.id)
             .eq('media_type', 'episode')
             .order('created_at', { ascending: false });
           if (!error) data = rows || [];
@@ -125,7 +140,7 @@ export default function ListsContent() {
     } finally {
       setDataLoading(false);
     }
-  }, [user, activeTab]);
+  }, [user, activeProfile?.id, activeTab]);
 
   useEffect(() => {
     fetchItems();
@@ -135,12 +150,17 @@ export default function ListsContent() {
     setRemoving(item.id);
     try {
       if (activeTab === 'history') {
-        await userListsService.removeRecentWatched(item.media_id, item.media_type, user?.id);
+        await userListsService.removeRecentWatched(
+          item.media_id,
+          item.media_type,
+          user?.id,
+          activeProfile?.id,
+        );
         setItems((prev) => prev.filter((i) => i.id !== item.id));
         return;
       }
 
-      if (!user) return;
+      if (!user || !activeProfile?.id) return;
       const supabase = createClient();
       const table =
         activeTab === 'favorites'
@@ -149,7 +169,12 @@ export default function ListsContent() {
             ? 'user_watchlist'
             : 'user_ratings';
 
-      await supabase.from(table).delete().eq('id', item.id).eq('user_id', user.id);
+      await supabase
+        .from(table)
+        .delete()
+        .eq('id', item.id)
+        .eq('user_id', user.id)
+        .eq('profile_id', activeProfile.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch {
       // silent
@@ -159,7 +184,7 @@ export default function ListsContent() {
   };
 
   const handleClearHistory = async () => {
-    await userListsService.clearRecentWatched(user?.id);
+    await userListsService.clearRecentWatched(user?.id, activeProfile?.id);
     setItems([]);
   };
 
@@ -417,8 +442,6 @@ export default function ListsContent() {
           </div>
         )}
       </div>
-
-      <Footer />
     </main>
   );
 }

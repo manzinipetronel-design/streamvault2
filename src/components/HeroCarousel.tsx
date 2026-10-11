@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
+import UpcomingBadge from '@/components/UpcomingBadge';
 
 interface Movie {
   id: number;
@@ -12,6 +13,7 @@ interface Movie {
   overview: string;
   backdrop_path?: string;
   release_date?: string;
+  first_air_date?: string;
   vote_average?: number;
 }
 
@@ -71,6 +73,8 @@ export default function HeroCarousel({
                 alt={displayHero.title || displayHero.name || 'Hero'}
                 fill
                 priority
+                sizes="100vw"
+                quality={90}
                 className="object-cover brightness-[0.35] contrast-[1.05]"
               />
             </motion.div>
@@ -119,12 +123,22 @@ export default function HeroCarousel({
                     <span>New &amp; Popular</span>
                     <span className="sv-hero-dot" />
                     <span>
-                      {displayHero.release_date?.slice(0, 4) || 'Coming soon'}
+                      {(displayHero.release_date || displayHero.first_air_date)?.slice(0, 4) || 'Coming soon'}
                       {displayHero.vote_average ? ` · ${displayHero.vote_average.toFixed(1)}` : ''}
                     </span>
+                    <UpcomingBadge
+                      releaseDate={displayHero.release_date || displayHero.first_air_date}
+                      showDate
+                    />
                   </div>
                 ) : (
-                  <span className="text-[13px] font-medium text-muted mb-3">Featured</span>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-[13px] font-medium text-muted">Featured</span>
+                    <UpcomingBadge
+                      releaseDate={displayHero.release_date || displayHero.first_air_date}
+                      showDate
+                    />
+                  </div>
                 )}
                 <h1
                   className={

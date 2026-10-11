@@ -3,14 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-
-const PUBLIC_PATHS = ['/login', '/forgot-password', '/auth/callback'];
-
-function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  );
-}
+import { isPublicPath } from '@/lib/authRoutes';
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -4,24 +4,31 @@ import React, { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
 import { userListsService, WatchedItem } from '@/lib/services/userListsService';
 
 export default function RecentWatchedRow() {
   const { user } = useAuth();
+  const { activeProfile } = useProfile();
   const [items, setItems] = useState<WatchedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
 
   const fetchRecent = React.useCallback(async () => {
+    if (user?.id && !activeProfile?.id) {
+      setItems([]);
+      setLoaded(true);
+      return;
+    }
     try {
-      const recent = await userListsService.getRecentWatched(user?.id);
+      const recent = await userListsService.getRecentWatched(user?.id, activeProfile?.id);
       setItems(recent);
     } catch {
       // silent
     } finally {
       setLoaded(true);
     }
-  }, [user?.id]);
+  }, [user?.id, activeProfile?.id]);
 
   useEffect(() => {
     fetchRecent();
@@ -49,7 +56,12 @@ export default function RecentWatchedRow() {
     e.preventDefault();
     e.stopPropagation();
     setItems((prev) => prev.filter((i) => !(i.media_id === item.media_id && i.media_type === item.media_type)));
-    await userListsService.removeRecentWatched(item.media_id, item.media_type, user?.id);
+    await userListsService.removeRecentWatched(
+      item.media_id,
+      item.media_type,
+      user?.id,
+      activeProfile?.id,
+    );
   };
 
   const scrollRow = (direction: number) => {

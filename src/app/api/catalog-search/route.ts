@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const provider = searchParams.get('provider');
   const company = searchParams.get('company');
   const genre = searchParams.get('genre');
+  const mediaType = searchParams.get('type');
 
   if (!q) {
     return NextResponse.json({ items: [] });
@@ -26,7 +27,11 @@ export async function GET(request: NextRequest) {
       : company
         ? await searchMoviesByCompany(q, Number(company))
         : genre
-          ? await searchMoviesByGenre(q, Number(genre))
+          ? await searchMoviesByGenre(
+              q,
+              Number(genre),
+              mediaType === 'movie' || mediaType === 'tv' ? mediaType : undefined
+            )
           : [];
     return NextResponse.json({ items });
   } catch {

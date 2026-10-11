@@ -1,6 +1,8 @@
 import HeaderAvatar from '@/components/HeaderAvatar';
+import KidsCatalog from '@/components/KidsCatalog';
 import FeaturedBanner from '@/components/FeaturedBanner';
 import GenreBrowser, { RowSection } from '@/components/GenreBrowser';
+import { getIsKidsProfile } from '@/lib/profileAccess';
 
 const SERIES_CHIP_GENRES = [
   { id: 18, label: 'Drama' },
@@ -89,6 +91,8 @@ interface PageProps {
 }
 
 export default async function SeriesPage({ searchParams }: PageProps) {
+  if (await getIsKidsProfile()) return <KidsCatalog page="series" />;
+
   const { genre } = await searchParams;
   const initialGenre = genre ? Number(genre) : undefined;
 
@@ -119,25 +123,25 @@ export default async function SeriesPage({ searchParams }: PageProps) {
       items: popularItems,
       isMock: popularItems === mockSeries,
       showRank: true,
-      viewAllHref: '/new',
+      viewAllHref: '/browse/catalog?collection=popular-tv&name=Popular%20Series',
     },
     {
       title: 'Drama Series',
       items: dramaItems,
       isMock: dramaItems.length > 0 && dramaItems[0].id > 300 && dramaItems[0].id < 410,
-      viewAllHref: '/series?genre=18',
+      viewAllHref: '/browse/catalog?genre=18&type=tv&name=Drama%20Series',
     },
     {
       title: 'Sci-Fi & Fantasy Series',
       items: scifiItems,
       isMock: scifiItems.length > 0 && scifiItems[0].id > 400 && scifiItems[0].id < 510,
-      viewAllHref: '/series?genre=10765',
+      viewAllHref: '/browse/catalog?genre=10765&type=tv&name=Sci-Fi%20%26%20Fantasy%20Series',
     },
     {
       title: 'Comedy Series',
       items: comedyItems,
       isMock: comedyItems.length > 0 && comedyItems[0].id > 500 && comedyItems[0].id < 610,
-      viewAllHref: '/series?genre=35',
+      viewAllHref: '/browse/catalog?genre=35&type=tv&name=Comedy%20Series',
     },
   ];
 

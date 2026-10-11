@@ -1,5 +1,5 @@
 import { GenericSkeleton } from '@/components/skeletons';
 
 export default function Loading() {
-  return <GenericSkeleton count={24} />;
+  return <GenericSkeleton count={20} />;
 }

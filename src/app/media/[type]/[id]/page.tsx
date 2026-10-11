@@ -22,7 +22,21 @@ import {
   TMDBCatalogItem,
 } from '@/lib/services/tmdbService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
+import {
+  ShieldMode,
+  SHIELD_OPTIONS,
+  POPUP_BLOCK_SANDBOX,
+  CLEAN_MODE_SANDBOX,
+  MAX_REDIRECT_RECOVERIES,
+  GUARD_READY_TIMEOUT_MS,
+  DEFAULT_SHIELD_MODE,
+  getSavedShieldMode,
+  saveShieldMode,
+} from '@/lib/shieldModes';
 import { userListsService, updateWatchProgress } from '@/lib/services/userListsService';
+import { evaluateRedirectRecovery } from '@/lib/playerRecovery';
+import UpcomingBadge from '@/components/UpcomingBadge';
 
 type MediaDetail =
   (TMDBMovieDetail & { mediaType: 'movie' }) | (TMDBTVDetail & { mediaType: 'tv'; title: string });
@@ -153,17 +167,6 @@ const EMBED_SOURCES: EmbedSource[] = [
   },
 ];
 
-// Popup / redirect blocking.
-// The embeds are cross-origin iframes, so page-level hooks (window.open,
-// click handlers) never see what happens inside them. The only reliable
-// control is the iframe `sandbox` attribute: the player still loads and
-// plays, but it is NOT granted allow-popups / allow-top-navigation, so it
-// can't open new tabs or redirect this page.
-const POPUP_BLOCK_SANDBOX =
-  'allow-scripts allow-same-origin allow-forms allow-presentation';
-// Used for proxied embeds served from our own origin — must NOT include
-// allow-same-origin, or third-party code could read our session storage.
-const CLEAN_MODE_SANDBOX = 'allow-scripts allow-forms allow-presentation';
 // Optional partial sandbox on the isolated origin before falling back to fully
 // unsandboxed compatibility mode (useful for sources that still work with a
 // partial sandbox, but can break if stricter).
@@ -217,6 +220,7 @@ export default function MediaDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { activeProfile } = useProfile();
 
   const rawType = params?.type;
   const rawId = params?.id;
@@ -249,16 +253,18 @@ export default function MediaDetailPage() {
   const [loadError, setLoadError] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [showSourceHint, setShowSourceHint] = useState(false);
-  const [blockPopups, setBlockPopups] = useState(true);
-  // Clean mode (experimental): loads the embed through /api/embed. Many
-  // players refuse to run this way, so it is OFF by default.
-  const [cleanMode, setCleanMode] = useState(false);
-  // Redirect recovery: the player iframe should load exactly once. A second
-  // load event means the embed navigated itself somewhere else (ad redirect),
-  // so we remount it with the original URL. Works in every browser.
+  const [shieldMode, setShieldMode] = useState<ShieldMode>(DEFAULT_SHIELD_MODE);
+  const cleanMode = shieldMode === 'max'; // proxy through /api/embed
+  const blockPopups = shieldMode !== 'off'; // sandbox the frame
   const [recoverKey, setRecoverKey] = useState(0);
-  const [redirectBlockedNotice, setRedirectBlockedNotice] = useState(false);
+  const [shieldNotice, setShieldNotice] = useState<string | null>(null);
+  const [recoveryExhausted, setRecoveryExhausted] = useState(false);
+  const [blockedCount, setBlockedCount] = useState(0);
+  const guardReadyRef = useRef(false);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadCountRef = useRef(0);
+  const userTappedRef = useRef(false);
+  const lastRecoveryAtRef = useRef(0);
   const recoveriesRef = useRef(0);
   const firstLoadAtRef = useRef(0);
   const lastProgressSavedRef = useRef<{ key: string; progress: number } | null>(null);
@@ -302,30 +308,124 @@ export default function MediaDetailPage() {
     }
   };
 
+  const flashNotice = useCallback((msg: string, ms = 3500) => {
+    setShieldNotice(msg);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setShieldNotice(null), ms);
+  }, []);
+
   useEffect(() => {
     recoveriesRef.current = 0;
+    setRecoveryExhausted(false);
   }, [activeSourceIndex, selectedSeason, selectedEpisode, cleanMode, blockPopups]);
 
   useEffect(() => {
     loadCountRef.current = 0;
+    guardReadyRef.current = false;
   }, [iframeKey, recoverKey, activeSourceIndex, selectedSeason, selectedEpisode, cleanMode, blockPopups]);
+
+  // A tap inside the (cross-origin) player moves focus into the iframe, which
+  // fires a window blur. That's our signal that the next extra load is an ad
+  // redirect, not a normal startup reload.
+  useEffect(() => {
+    if (!showPlayer) return;
+    const onBlur = () => {
+      setTimeout(() => {
+        if (document.activeElement === iframeRef.current) userTappedRef.current = true;
+      }, 0);
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [showPlayer]);
+
+  // Max shield couldn't run: go back to Standard for this session only.
+  // (Deliberately NOT saved as the source's preference - the failure may be temporary.)
+  const fallbackToStandard = useCallback(
+    (why: string) => {
+      const name = EMBED_SOURCES[activeSourceIndex].name;
+      setShieldMode('standard');
+      setIframeLoaded(false);
+      setIframeKey((k) => k + 1);
+      flashNotice(`Max shield: ${why} - using Standard for ${name}`, 6000);
+    },
+    [activeSourceIndex, flashNotice]
+  );
+
+  // Reports from the guard script / proxy error page (Max shield only).
+  useEffect(() => {
+    if (!showPlayer) return;
+    const onMsg = (e: MessageEvent) => {
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
+      const d = e.data;
+      if (!d || typeof d !== 'object' || d.type !== 'sv-shield') return;
+      if (d.kind === 'ready') guardReadyRef.current = true;
+      else if (d.kind === 'proxy-error') {
+        if (d.reason === 'Upstream redirected somewhere not allowed') {
+          guardReadyRef.current = true;
+          flashNotice('Max shield blocked an off-site redirect', 6000);
+        } else {
+          fallbackToStandard(`${d.reason} (${d.status})`);
+        }
+      }
+      else setBlockedCount((c) => c + 1);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [showPlayer, fallbackToStandard, flashNotice]);
+
+  // Safety net: frame loaded but the guard never checked in.
+  useEffect(() => {
+    if (!showPlayer || !cleanMode || !iframeLoaded) return;
+    const t = setTimeout(() => {
+      if (!guardReadyRef.current) fallbackToStandard("page didn't run the guard");
+    }, GUARD_READY_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [showPlayer, cleanMode, iframeLoaded, iframeKey, recoverKey, fallbackToStandard]);
+
+  // With no sandbox (Off), a player can redirect this whole page.
+  useEffect(() => {
+    if (!showPlayer || shieldMode !== 'off') return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [showPlayer, shieldMode]);
 
   const handleFrameLoad = () => {
     loadCountRef.current += 1;
     setIframeLoaded(true);
     if (loadCountRef.current === 1) {
       firstLoadAtRef.current = Date.now();
+      userTappedRef.current = false; // fresh frame, fresh tap state
       return;
     }
-    // Ignore extra loads in the first few seconds: embeds legitimately
-    // redirect/reload while starting up. Ad redirects happen later, after
-    // the viewer clicks the player.
-    if (Date.now() - firstLoadAtRef.current < 5000) return;
-    if (recoveriesRef.current < 2) {
-      recoveriesRef.current += 1;
-      setRedirectBlockedNotice(true);
-      setTimeout(() => setRedirectBlockedNotice(false), 3500);
+    // Extra load = the frame navigated itself. Startup reloads happen right
+    // away without a tap, so only ignore early loads if nobody tapped the player.
+    const early = Date.now() - firstLoadAtRef.current < 5000;
+    if (early && !userTappedRef.current) return;
+
+    // Rolling cap: the count forgets itself after 60s without a redirect,
+    // so a source that redirects once in a while is never cut off for good.
+    const now = Date.now();
+    const recovery = evaluateRedirectRecovery(
+      {
+        recoveries: recoveriesRef.current,
+        lastRecoveryAt: lastRecoveryAtRef.current,
+      },
+      now,
+      MAX_REDIRECT_RECOVERIES,
+    );
+    recoveriesRef.current = recovery.recoveries;
+    lastRecoveryAtRef.current = recovery.lastRecoveryAt;
+
+    if (recovery.shouldRecover) {
+      setBlockedCount((c) => c + 1);
+      flashNotice('Redirect blocked - player restored');
       setRecoverKey((k) => k + 1);
+    } else {
+      setRecoveryExhausted(true);
     }
   };
 
@@ -349,7 +449,7 @@ export default function MediaDetailPage() {
     }
     if (mediaId && mediaType) fetchDetail();
     setBrowseSeason(1); // reset when navigating to a different title
-  }, [mediaId, mediaType]);
+  }, [mediaId, mediaType, user?.id, activeProfile?.id]);
 
   // Fetch real episode data for the season currently being browsed
   useEffect(() => {
@@ -425,11 +525,11 @@ export default function MediaDetailPage() {
 
   useEffect(() => {
     async function checkStatus() {
-      if (!user || !detail) return;
+      if (!user || !activeProfile?.id || !detail) return;
       try {
         const [fav, watch] = await Promise.all([
-          userListsService.isFavorite(user.id, mediaId, mediaType),
-          userListsService.isInWatchlist(user.id, mediaId, mediaType),
+          userListsService.isFavorite(user.id, mediaId, mediaType, activeProfile.id),
+          userListsService.isInWatchlist(user.id, mediaId, mediaType, activeProfile.id),
         ]);
         setIsFav(fav);
         setIsWatchlist(watch);
@@ -438,14 +538,19 @@ export default function MediaDetailPage() {
       }
     }
     checkStatus();
-  }, [user, detail, mediaId, mediaType]);
+  }, [user, activeProfile?.id, detail, mediaId, mediaType]);
 
   // Check if this title was recently watched to allow seamless resume
   useEffect(() => {
     async function loadWatchHistory() {
-      if (!mediaId || !mediaType) return;
+      if (!mediaId || !mediaType || (user?.id && !activeProfile?.id)) return;
       try {
-        const watched = await userListsService.getWatchedDetail(mediaId, mediaType, user?.id);
+        const watched = await userListsService.getWatchedDetail(
+          mediaId,
+          mediaType,
+          user?.id,
+          activeProfile?.id,
+        );
         if (watched) {
           const s = watched.season ?? watched.season_number;
           const e = watched.episode ?? watched.episode_number;
@@ -500,13 +605,17 @@ export default function MediaDetailPage() {
       selectedEpisode,
       resumeProgress
     );
-    // Sandbox-intolerant sources: resolved on the server, served from the
-    // isolated host. Without NEXT_PUBLIC_EMBED_ORIGIN we fall back to the
-    // direct URL (unsandboxed) rather than serve it from the main origin.
+    // Max shield always uses the strict proxy, including for sources that
+    // normally need the unsandboxed compatibility route.
+    const proxy = process.env.NEXT_PUBLIC_EMBED_ORIGIN ?? '';
+    if (cleanMode) {
+      return `${proxy}/api/embed?url=${encodeURIComponent(url)}`;
+    }
+    // Sandbox-intolerant sources use the compatibility route in Standard/Off.
     if (isUnsandboxed(source)) {
       return `${EMBED_ORIGIN}/api/embed?mode=compat&url=${encodeURIComponent(url)}`;
     }
-    return cleanMode ? `/api/embed?url=${encodeURIComponent(url)}` : url;
+    return url;
   }, [
     mediaId,
     mediaType,
@@ -524,6 +633,8 @@ export default function MediaDetailPage() {
     }
     setShowPlayer(true);
     setActiveSourceIndex(0);
+    setShieldMode(getSavedShieldMode(EMBED_SOURCES[0].name));
+    setBlockedCount(0);
     setLoadError(false);
     setIframeLoaded(false);
     setIframeKey((k) => k + 1);
@@ -544,20 +655,23 @@ export default function MediaDetailPage() {
           ? (detail as TMDBMovieDetail).releaseDate?.slice(0, 4) || ''
           : (detail as TMDBTVDetail).firstAirDate?.slice(0, 4) || '';
 
-      userListsService.recordWatched(
-        {
-          mediaId: String(detail.id),
-          mediaType: detail.mediaType,
-          title: detail.title,
-          posterUrl: detail.img,
-          genre,
-          year,
-          rating: detail.rating,
-          season: detail.mediaType === 'tv' ? s : undefined,
-          episode: detail.mediaType === 'tv' ? e : undefined,
-        },
-        user?.id
-      );
+      if (!user?.id || activeProfile?.id) {
+        userListsService.recordWatched(
+          {
+            mediaId: String(detail.id),
+            mediaType: detail.mediaType,
+            title: detail.title,
+            posterUrl: detail.img,
+            genre,
+            year,
+            rating: detail.rating,
+            season: detail.mediaType === 'tv' ? s : undefined,
+            episode: detail.mediaType === 'tv' ? e : undefined,
+          },
+          user?.id,
+          activeProfile?.id
+        );
+      }
     }
   };
 
@@ -656,18 +770,21 @@ export default function MediaDetailPage() {
         };
         if (shouldSaveProgress) {
           lastProgressSavedRef.current = { key: resumeKey, progress: roundedProgress };
-          void updateWatchProgress({
-            mediaId: detail.id,
-            mediaType: detail.mediaType,
-            title: detail.title,
-            posterPath: detail.img || '',
-            progress: roundedProgress,
-            duration: roundedDuration,
-            seasonNumber: detail.mediaType === 'tv' ? playerSeason : undefined,
-            episodeNumber: detail.mediaType === 'tv' ? playerEpisode : undefined,
-          }).catch((error: unknown) => {
-            console.error('[VidSrc] Failed to save playback progress:', error);
-          });
+          if (!user?.id || activeProfile?.id) {
+            void updateWatchProgress({
+              mediaId: detail.id,
+              mediaType: detail.mediaType,
+              title: detail.title,
+              posterPath: detail.img || '',
+              progress: roundedProgress,
+              duration: roundedDuration,
+              seasonNumber: detail.mediaType === 'tv' ? playerSeason : undefined,
+              episodeNumber: detail.mediaType === 'tv' ? playerEpisode : undefined,
+              profileId: activeProfile?.id,
+            }).catch((error: unknown) => {
+              console.error('[VidSrc] Failed to save playback progress:', error);
+            });
+          }
         }
       }
     };
@@ -682,10 +799,24 @@ export default function MediaDetailPage() {
     mediaId,
     selectedSeason,
     selectedEpisode,
+    user?.id,
+    activeProfile?.id,
   ]);
+
+  const handleShieldChange = (mode: ShieldMode) => {
+    if (mode === shieldMode) return;
+    saveShieldMode(EMBED_SOURCES[activeSourceIndex].name, mode);
+    setShieldMode(mode);
+    setLoadError(false);
+    setRecoveryExhausted(false);
+    setIframeLoaded(false);
+    setIframeKey((k) => k + 1);
+  };
 
   const handleSourceChange = (index: number) => {
     setActiveSourceIndex(index);
+    setShieldMode(getSavedShieldMode(EMBED_SOURCES[index].name));
+    setBlockedCount(0);
     setLoadError(false);
     setIframeLoaded(false);
     setIframeKey((k) => k + 1);
@@ -706,6 +837,7 @@ export default function MediaDetailPage() {
       router.push('/login');
       return;
     }
+    if (!activeProfile?.id) return;
     if (!detail) return;
     setFavLoading(true);
     try {
@@ -718,7 +850,7 @@ export default function MediaDetailPage() {
           ? (detail as TMDBMovieDetail).releaseDate?.slice(0, 4) || ''
           : (detail as TMDBTVDetail).firstAirDate?.slice(0, 4) || '';
       if (isFav) {
-        await userListsService.removeFavorite(user.id, mediaId, mediaType);
+        await userListsService.removeFavorite(user.id, mediaId, mediaType, activeProfile.id);
         setIsFav(false);
       } else {
         await userListsService.addFavorite(user.id, {
@@ -729,7 +861,7 @@ export default function MediaDetailPage() {
           genre,
           year,
           rating: detail.rating,
-        });
+        }, activeProfile.id);
         setIsFav(true);
       }
     } catch {
@@ -744,6 +876,7 @@ export default function MediaDetailPage() {
       router.push('/login');
       return;
     }
+    if (!activeProfile?.id) return;
     if (!detail) return;
     setWatchLoading(true);
     try {
@@ -756,7 +889,7 @@ export default function MediaDetailPage() {
           ? (detail as TMDBMovieDetail).releaseDate?.slice(0, 4) || ''
           : (detail as TMDBTVDetail).firstAirDate?.slice(0, 4) || '';
       if (isWatchlist) {
-        await userListsService.removeFromWatchlist(user.id, mediaId, mediaType);
+        await userListsService.removeFromWatchlist(user.id, mediaId, mediaType, activeProfile.id);
         setIsWatchlist(false);
       } else {
         await userListsService.addToWatchlist(user.id, {
@@ -767,7 +900,7 @@ export default function MediaDetailPage() {
           genre,
           year,
           rating: detail.rating,
-        });
+        }, activeProfile.id);
         setIsWatchlist(true);
       }
     } catch {
@@ -814,6 +947,7 @@ export default function MediaDetailPage() {
   const releaseYear = isMovie
     ? movieDetail?.releaseDate?.slice(0, 4)
     : (detail as TMDBTVDetail)?.firstAirDate?.slice(0, 4);
+  const releaseDate = isMovie ? movieDetail?.releaseDate : tvDetail?.firstAirDate;
   const extraInfo = isMovie
     ? movieDetail?.runtime
       ? `${Math.floor(movieDetail.runtime / 60)}h ${movieDetail.runtime % 60}m`
@@ -933,6 +1067,7 @@ export default function MediaDetailPage() {
                     {cert}
                   </span>
                 )}
+                <UpcomingBadge releaseDate={releaseDate} showDate featured />
               </div>
 
               {/* Big, gradient-filled display title — the signature StreamVault flourish */}
@@ -989,7 +1124,7 @@ export default function MediaDetailPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
                 {/* Primary Watch Button */}
                 <button
                   onClick={() =>
@@ -998,7 +1133,7 @@ export default function MediaDetailPage() {
                       resumeProgressRef.current?.episode ?? lastWatched?.episode
                     )
                   }
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-black font-bold text-sm hover:bg-zinc-200 transition-all shadow-lg cursor-pointer active:scale-95"
+                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-black shadow-lg transition-all hover:bg-zinc-200 active:scale-95 sm:w-auto sm:px-6"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   {showPlayer
@@ -1012,42 +1147,44 @@ export default function MediaDetailPage() {
                     : 'Watch Now'}
                 </button>
 
-                <StreamtapeDownloadButton
-                  tmdbId={mediaId}
-                  mediaType={mediaType}
-                  season={selectedSeason}
-                  episode={selectedEpisode}
-                />
+                <div className="flex items-center gap-3">
+                  <StreamtapeDownloadButton
+                    tmdbId={mediaId}
+                    mediaType={mediaType}
+                    season={selectedSeason}
+                    episode={selectedEpisode}
+                  />
 
-                {/* Favorite Button */}
-                <button
-                  onClick={handleFavorite}
-                  disabled={favLoading}
-                  className={`p-3 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
-                    isFavorite
-                      ? 'bg-rose-500/20 border-rose-500 text-rose-500 shadow-lg shadow-rose-500/20'
-                      : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
-                  }`}
-                  title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-                  aria-label={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-                >
-                  <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
-                </button>
+                  {/* Favorite Button */}
+                  <button
+                    onClick={handleFavorite}
+                    disabled={favLoading}
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                      isFavorite
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-500 shadow-lg shadow-rose-500/20'
+                        : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                    }`}
+                    title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                    aria-label={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                  >
+                    <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                  </button>
 
-                {/* Watchlist Button */}
-                <button
-                  onClick={handleWatchlist}
-                  disabled={watchLoading}
-                  className={`p-3 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
-                    isInWatchlist
-                      ? 'bg-violet-600/20 border-violet-500 text-violet-400 shadow-lg shadow-violet-600/20'
-                      : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
-                  }`}
-                  title={isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
-                  aria-label={isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
-                >
-                  {isInWatchlist ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                </button>
+                  {/* Watchlist Button */}
+                  <button
+                    onClick={handleWatchlist}
+                    disabled={watchLoading}
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                      isInWatchlist
+                        ? 'bg-violet-600/20 border-violet-500 text-violet-400 shadow-lg shadow-violet-600/20'
+                        : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                    }`}
+                    title={isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    aria-label={isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  >
+                    {isInWatchlist ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1094,42 +1231,78 @@ export default function MediaDetailPage() {
                   {src.name}
                 </button>
               ))}
-              <button
-                onClick={() => {
-                  setCleanMode((v) => !v);
-                  setIframeLoaded(false);
-                  setIframeKey((k) => k + 1);
-                }}
-                title="Loads the player through our server with ad scripts removed. Turn off if the video won't play."
-                className={`ml-auto px-3.5 py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer border ${
-                  cleanMode
-                    ? 'bg-violet/20 border-violet/50 text-violet-light'
-                    : 'bg-void-2 border-glass-border text-muted hover:text-foreground'
-                }`}
-              >
-                Clean mode: {cleanMode ? 'On' : 'Off'}
-              </button>
-              <button
-                onClick={() => {
-                  setBlockPopups((v) => !v);
-                  setIframeLoaded(false);
-                  setIframeKey((k) => k + 1);
-                }}
-                title="Blocks popups and redirects from the player. Turn off if the video won't play."
-                className={`px-3.5 py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer border ${
-                  blockPopups
-                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                    : 'bg-void-2 border-glass-border text-muted hover:text-foreground'
-                }`}
-              >
-                Popup blocker: {blockPopups ? 'On' : 'Off'}
-              </button>
+              <div className="ml-auto flex items-center gap-2">
+                {blockedCount > 0 && (
+                  <span
+                    className="text-[11px] font-medium text-emerald-300/90 tabular-nums"
+                    title="Popups, hijacked links and redirects stopped for this source"
+                  >
+                    {blockedCount} blocked
+                  </span>
+                )}
+                <div
+                  role="radiogroup"
+                  aria-label="Ad and popup shield"
+                  className="inline-flex items-center rounded-lg border border-glass-border bg-void-2 p-0.5"
+                >
+                  <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Shield
+                  </span>
+                  {SHIELD_OPTIONS.map((opt) => {
+                    const active = shieldMode === opt.mode;
+                    const activeStyle =
+                      opt.mode === 'max'
+                        ? 'bg-violet/25 text-violet-light'
+                        : opt.mode === 'standard'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-white/10 text-foreground';
+                    return (
+                      <button
+                        key={opt.mode}
+                        role="radio"
+                        aria-checked={active}
+                        title={opt.hint}
+                        onClick={() => handleShieldChange(opt.mode)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                          active ? activeStyle : 'text-muted hover:text-foreground'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {cleanMode && isUnsandboxed(EMBED_SOURCES[activeSourceIndex]) && (
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
                 <span className="h-2 w-2 rounded-full bg-amber-400" />
                 isolated, not sandboxed
+              </div>
+            )}
+
+            {recoveryExhausted && (
+              <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 rounded-xl mb-4 bg-amber-500/10 border border-amber-500/30">
+                <p className="text-amber-300 text-xs font-semibold">
+                  This source keeps trying to redirect. Try a stronger shield or another source.
+                </p>
+                <div className="flex items-center gap-2">
+                  {shieldMode !== 'max' && shieldMode !== 'off' && (
+                    <button
+                      onClick={() => handleShieldChange('max')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-violet/30 border border-violet/50 text-white hover:bg-violet/50 transition-all cursor-pointer"
+                    >
+                      Use Max shield
+                    </button>
+                  )}
+                  <button
+                    onClick={handleNextSource}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 border border-glass-border text-foreground hover:bg-white/20 transition-all cursor-pointer"
+                  >
+                    Next source
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1191,9 +1364,12 @@ export default function MediaDetailPage() {
                 </div>
               )}
 
-              {redirectBlockedNotice && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-void-2/90 border border-glass-border text-[12px] text-foreground">
-                  Redirect blocked — player restored
+              {shieldNotice && (
+                <div
+                  role="status"
+                  className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-void-2/90 border border-glass-border text-[12px] text-foreground"
+                >
+                  {shieldNotice}
                 </div>
               )}
 
@@ -1203,12 +1379,12 @@ export default function MediaDetailPage() {
                 src={getEmbedUrl()}
                 className="w-full h-full"
                 allowFullScreen
-                {...(isUnsandboxed(EMBED_SOURCES[activeSourceIndex])
+                {...(cleanMode
+                  ? { sandbox: CLEAN_MODE_SANDBOX }
+                  : isUnsandboxed(EMBED_SOURCES[activeSourceIndex])
                   ? COMPAT_SANDBOX
                     ? { sandbox: COMPAT_SANDBOX }
                     : {}
-                  : cleanMode
-                  ? { sandbox: CLEAN_MODE_SANDBOX } // no allow-same-origin: embed code can't touch our origin
                   : blockPopups && EMBED_SOURCES[activeSourceIndex].sandbox !== false
                     ? { sandbox: EMBED_SOURCES[activeSourceIndex].sandbox || POPUP_BLOCK_SANDBOX }
                     : {})}

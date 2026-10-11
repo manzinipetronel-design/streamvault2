@@ -1,6 +1,8 @@
 import { HeaderAvatar } from '@/components/HeaderAvatar';
+import KidsCatalog from '@/components/KidsCatalog';
 import FeaturedBanner from '@/components/FeaturedBanner';
 import TypeFilterRows, { TypedRowSection } from '@/components/TypeFilterRows';
+import { getIsKidsProfile } from '@/lib/profileAccess';
 
 const mockMovies = [
   {
@@ -52,6 +54,8 @@ async function fetchNew(endpoint: string) {
 }
 
 export default async function NewAndPopularPage() {
+  if (await getIsKidsProfile()) return <KidsCatalog page="new" />;
+
   let upcoming: any[] = [];
   let nowPlaying: any[] = [];
   let trendingMovies: any[] = [];
@@ -110,7 +114,7 @@ export default async function NewAndPopularPage() {
         isMock: trendingMoviesItems.length > 0 && trendingMoviesItems[0].id > 200 && trendingMoviesItems[0].id < 310,
         showRank: true,
         mediaType: 'movie',
-        viewAllHref: '/movies',
+        viewAllHref: '/browse/catalog?collection=trending-movies&name=Trending%20Movies%20Today',
       },
       {
         title: 'Trending TV Today',
@@ -118,21 +122,21 @@ export default async function NewAndPopularPage() {
         isMock: trendingTVItems.length > 0 && trendingTVItems[0].id > 300 && trendingTVItems[0].id < 410,
         showRank: true,
         mediaType: 'tv',
-        viewAllHref: '/series',
+        viewAllHref: '/browse/catalog?collection=trending-tv&name=Trending%20TV%20Today',
       },
       {
         title: 'Upcoming Hits',
         items: upcomingItems,
         isMock: upcomingItems === mockMovies,
         mediaType: 'movie',
-        viewAllHref: '/movies',
+        viewAllHref: '/browse/catalog?collection=upcoming-movies&name=Upcoming%20Hits',
       },
       {
         title: 'In Theaters Now',
         items: nowPlayingItems,
         isMock: nowPlayingItems.length > 0 && nowPlayingItems[0].id > 100 && nowPlayingItems[0].id < 210,
         mediaType: 'movie',
-        viewAllHref: '/movies',
+        viewAllHref: '/browse/catalog?collection=now-playing-movies&name=In%20Theaters%20Now',
       },
     ];
     return (

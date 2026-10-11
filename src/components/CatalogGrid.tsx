@@ -2,6 +2,10 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { EyeOff } from 'lucide-react';
+import type { TMDBCatalogCollection, TMDBEraKey, TMDBKidsCollection } from '@/lib/services/tmdbService';
+import UpcomingBadge from '@/components/UpcomingBadge';
+import { useKidsControls } from '@/contexts/KidsControlsContext';
 
 interface CatalogMovie {
   id: number;
@@ -20,17 +24,83 @@ interface CatalogGridProps {
   companyId?: number | null;
   /** TMDB genre id (e.g. Action) — enables real cross-catalog search. */
   genreId?: number | null;
+  mediaType?: 'movie' | 'tv';
+  collection?: TMDBCatalogCollection;
+  era?: TMDBEraKey;
+  kidsCollection?: TMDBKidsCollection;
+  totalResults: number;
+  totalPages: number;
 }
 
-export default function CatalogGrid({ items, providerId, companyId, genreId }: CatalogGridProps) {
+export default function CatalogGrid({
+  items,
+  providerId,
+  companyId,
+  genreId,
+  mediaType,
+  collection,
+  era,
+  kidsCollection,
+  totalResults,
+  totalPages,
+}: CatalogGridProps) {
+  const [loadedItems, setLoadedItems] = useState(items);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadedTotalPages, setLoadedTotalPages] = useState(totalPages);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<CatalogMovie[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
+  const [busyTitle, setBusyTitle] = useState<string | null>(null);
+  const {
+    isHidden,
+    hideTitle,
+    error: kidsControlsError,
+    loadError: kidsControlsLoadError,
+    loading: kidsControlsLoading,
+  } = useKidsControls();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
 
   const canRealSearch = providerId != null || companyId != null || genreId != null;
+  const canLoadMore = !query.trim() && currentPage < loadedTotalPages;
+
+  const loadMore = async () => {
+    if (isLoadingMore || !canLoadMore) return;
+
+    setIsLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const params = new URLSearchParams({ page: String(currentPage + 1) });
+      if (providerId != null) params.set('provider', String(providerId));
+      if (companyId != null) params.set('company', String(companyId));
+      if (genreId != null) params.set('genre', String(genreId));
+      if (mediaType) params.set('type', mediaType);
+      if (collection) params.set('collection', collection);
+      if (era) params.set('era', era);
+      if (kidsCollection) params.set('kids', kidsCollection);
+
+      const response = await fetch(`/api/catalog-page?${params.toString()}`);
+      if (!response.ok) throw new Error('catalog page request failed');
+      const result = await response.json();
+      const nextItems = (result.items || []) as CatalogMovie[];
+      setLoadedItems((currentItems) => {
+        const existing = new Set(currentItems.map((item) => `${item.mediaType}-${item.id}`));
+        return [
+          ...currentItems,
+          ...nextItems.filter((item) => !existing.has(`${item.mediaType}-${item.id}`)),
+        ];
+      });
+      setCurrentPage(currentPage + 1);
+      setLoadedTotalPages(result.totalPages || loadedTotalPages);
+    } catch {
+      setLoadMoreFailed(true);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -55,6 +125,7 @@ export default function CatalogGrid({ items, providerId, companyId, genreId }: C
         if (providerId != null) params.set('provider', String(providerId));
         if (companyId != null) params.set('company', String(companyId));
         if (genreId != null) params.set('genre', String(genreId));
+        if (mediaType) params.set('type', mediaType);
 
         const res = await fetch(`/api/catalog-search?${params.toString()}`);
         if (!res.ok) throw new Error('search request failed');
@@ -75,15 +146,15 @@ export default function CatalogGrid({ items, providerId, companyId, genreId }: C
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, providerId, companyId, genreId, canRealSearch]);
+  }, [query, providerId, companyId, genreId, mediaType, canRealSearch]);
 
   // Fallback: local filter over the preloaded pool, used when there's no
   // provider/company id to search against, or the network search failed.
   const localFiltered = useMemo(() => {
     if (!query.trim()) return items;
     const q = query.trim().toLowerCase();
-    return items.filter((m) => m.title.toLowerCase().includes(q));
-  }, [items, query]);
+    return loadedItems.filter((m) => m.title.toLowerCase().includes(q));
+  }, [items, loadedItems, query]);
 
   const showing = query.trim()
     ? searchResults !== null
@@ -91,7 +162,12 @@ export default function CatalogGrid({ items, providerId, companyId, genreId }: C
       : searchFailed
         ? localFiltered
         : []
-    : items;
+    : loadedItems;
+  const visibleItems = kidsCollection
+    ? kidsControlsLoading || kidsControlsLoadError
+      ? []
+      : showing.filter((item) => !isHidden(item.id, item.mediaType))
+    : showing;
 
   return (
     <div>
@@ -157,29 +233,49 @@ export default function CatalogGrid({ items, providerId, companyId, genreId }: C
             </div>
           ))}
         </div>
-      ) : showing.length === 0 && query.trim() ? (
+      ) : kidsCollection && (kidsControlsLoading || kidsControlsLoadError) ? (
+        <p role="status" className="py-16 text-center text-sm text-muted">
+          {kidsControlsLoading
+            ? 'Loading Kids settings…'
+            : 'Kids titles are hidden because saved settings could not be loaded.'}
+        </p>
+      ) : visibleItems.length === 0 && query.trim() ? (
         <p className="text-muted text-sm py-16 text-center">No titles match &ldquo;{query}&rdquo;.</p>
+      ) : visibleItems.length === 0 && kidsCollection ? (
+        <p className="text-muted text-sm py-16 text-center">
+          {showing.length > 0
+            ? 'All titles here are hidden. Parents can restore titles in Account Settings.'
+            : 'No titles are available for this catalog right now.'}
+        </p>
       ) : (
         <div className="spotlight-scope grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-          {showing.map((m) => {
+          {visibleItems.map((m) => {
             const year = m.release_date ? m.release_date.slice(0, 4) : '';
+            const mediaKey = `${m.mediaType}:${m.id}`;
             return (
-              <Link
+              <div
                 key={m.id}
-                id={`catalog-item-${m.id}`}
-                href={`/media/${m.mediaType}/${m.id}`}
-                prefetch={false}
-                className="group relative rounded-[10px] overflow-hidden"
+                className="group/card relative overflow-hidden rounded-[10px]"
               >
-                <div className="relative aspect-[2/3] w-full overflow-hidden bg-void-2">
+                <Link
+                  id={`catalog-item-${m.id}`}
+                  href={`/media/${m.mediaType}/${m.id}`}
+                  prefetch={false}
+                  className="group relative block rounded-[10px] overflow-hidden"
+                >
+                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-void-2">
                   <span className="absolute top-2 left-2 z-10 text-[9px] font-display font-semibold uppercase tracking-wide text-foreground/80 bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded">
                     {m.mediaType === 'tv' ? 'Series' : 'Movie'}
                   </span>
+                  <div className="absolute top-2 right-2 z-10">
+                    <UpcomingBadge releaseDate={m.release_date} />
+                  </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`https://image.tmdb.org/t/p/w500${m.poster_path}`}
+                    src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
                     alt={m.title}
                     loading="lazy"
+                    decoding="async"
                     className="quiet-media object-cover w-full h-full group-hover:scale-[1.045]"
                   />
                   <div className="absolute inset-0 flex flex-col justify-end p-3 bg-gradient-to-t from-void via-void/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -198,11 +294,58 @@ export default function CatalogGrid({ items, providerId, companyId, genreId }: C
                       <span>{year}</span>
                     </div>
                   </div>
-                </div>
-              </Link>
+                  </div>
+                </Link>
+                {kidsCollection && (
+                  <button
+                    type="button"
+                    aria-label={`Hide ${m.title} from Kids`}
+                    title="Hide this title from Kids"
+                    disabled={busyTitle === mediaKey}
+                    onClick={async () => {
+                      setBusyTitle(mediaKey);
+                      await hideTitle({
+                        media_id: String(m.id),
+                        media_type: m.mediaType,
+                        title: m.title,
+                        poster_path: m.poster_path || null,
+                      });
+                      setBusyTitle(null);
+                    }}
+                    className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white opacity-100 backdrop-blur-sm transition hover:bg-rose-600 disabled:opacity-50 md:opacity-0 md:group-hover/card:opacity-100"
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
+      )}
+
+      {kidsCollection && kidsControlsError && (
+        <p role="alert" className="mt-3 text-xs text-rose-400">{kidsControlsError}</p>
+      )}
+      {canLoadMore && (
+        <div className="flex flex-col items-center gap-2 py-10">
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            aria-busy={isLoadingMore}
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] px-6 text-sm font-semibold text-foreground transition-colors hover:bg-white/[0.12] disabled:cursor-wait disabled:opacity-60"
+          >
+            {isLoadingMore ? 'Loading…' : loadMoreFailed ? 'Try again' : 'Load more'}
+          </button>
+          {loadMoreFailed && (
+            <p className="text-xs text-muted" role="status">
+              Couldn’t load more titles. Please try again.
+            </p>
+          )}
+        </div>
+      )}
+      {!query.trim() && totalResults > 0 && !canLoadMore && (
+        <p className="py-8 text-center text-xs text-muted">You’ve reached the end.</p>
       )}
     </div>
   );

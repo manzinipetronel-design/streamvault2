@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Play, Plus, Star } from 'lucide-react';
+import UpcomingBadge from '@/components/UpcomingBadge';
 
 export interface MediaCardProps {
   id: string | number;
@@ -10,6 +11,7 @@ export interface MediaCardProps {
   posterPath: string;
   voteAverage?: number;
   releaseYear?: string;
+  releaseDate?: string;
   mediaType?: 'movie' | 'tv';
   onPlay?: (e: React.MouseEvent) => void;
   onWatchlist?: (e: React.MouseEvent) => void;
@@ -21,6 +23,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   posterPath,
   voteAverage,
   releaseYear,
+  releaseDate,
   mediaType = 'movie',
   onPlay,
   onWatchlist,
@@ -63,6 +66,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
           loading="lazy"
         />
+
+        <div className="absolute top-2 right-2 z-10">
+          <UpcomingBadge releaseDate={releaseDate} />
+        </div>
 
         {/* Dynamic Dark Gradient Overlay on Hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">

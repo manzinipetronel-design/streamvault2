@@ -5,38 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShieldCheck, Sparkles, Check, Edit2, LogOut, Heart, Bookmark, Star, Tv, Film, List } from 'lucide-react';
 import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
-
-// Preset high-res avatar options (movie/character styled presets)
-const AVATAR_OPTIONS = [
-  {
-    id: '1',
-    name: 'Cyber Neon',
-    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: '2',
-    name: 'Vanguard',
-    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: '3',
-    name: 'Phantom',
-    url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: '4',
-    name: 'Astral',
-    url: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: '5',
-    name: 'Starlight',
-    url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-  },
-];
+import KidsParentalControls from '@/components/KidsParentalControls';
+import ProfileManager from '@/components/ProfileManager';
+import { PROFILE_AVATARS } from '@/lib/profileAvatars';
 
 interface UserProfile {
   id: string;
@@ -50,7 +23,7 @@ export default function AccountDetailsPage() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_OPTIONS[0].url);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>(PROFILE_AVATARS[0].url);
   const [isEditingAvatar, setIsEditingAvatar] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [autoplayNext, setAutoplayNext] = useState(true);
@@ -234,11 +207,11 @@ export default function AccountDetailsPage() {
                 Choose Profile Icon
               </p>
               <div className="flex flex-wrap gap-4">
-                {AVATAR_OPTIONS.map((avatar) => (
+                {PROFILE_AVATARS.map((avatar) => (
                   <button
                     key={avatar.id}
                     onClick={() => handleAvatarSelect(avatar.url)}
-                    className={`relative w-14 h-14 rounded-full overflow-hidden border-2 transition-all hover:scale-105 cursor-pointer ${
+                    className={`relative w-14 h-14 rounded-full overflow-hidden border-2 bg-zinc-900 p-0.5 transition-all hover:scale-105 cursor-pointer ${
                       selectedAvatar === avatar.url
                         ? 'border-violet-500 ring-2 ring-violet-500/50'
                         : 'border-zinc-700 opacity-60 hover:opacity-100'
@@ -248,7 +221,7 @@ export default function AccountDetailsPage() {
                     <img
                       src={avatar.url}
                       alt={avatar.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full rounded-full object-contain"
                     />
                     {selectedAvatar === avatar.url && (
                       <div className="absolute inset-0 bg-violet-600/40 flex items-center justify-center">
@@ -294,6 +267,9 @@ export default function AccountDetailsPage() {
             </div>
           </div>
         </div>
+
+        <ProfileManager />
+        <KidsParentalControls />
 
         {/* Streaming Preferences Card */}
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-xl">
@@ -421,8 +397,6 @@ export default function AccountDetailsPage() {
           {signingOut ? 'Signing out...' : 'Sign Out'}
         </button>
       </main>
-
-      <Footer />
     </div>
   );
 }

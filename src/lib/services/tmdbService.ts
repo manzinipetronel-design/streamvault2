@@ -625,7 +625,9 @@ export interface TMDBEraRow {
   items: TMDBMovie[];
 }
 
-const ERA_RANGES: { key: string; title: string; subtitle: string; from: string; to: string }[] = [
+export type TMDBEraKey = '2020s' | '2010s' | '2000s' | 'pre2000';
+
+const ERA_RANGES: { key: TMDBEraKey; title: string; subtitle: string; from: string; to: string }[] = [
   {
     key: '2020s',
     title: '2020s Standouts',
@@ -655,6 +657,28 @@ const ERA_RANGES: { key: string; title: string; subtitle: string; from: string; 
     to: '1999-12-31',
   },
 ];
+
+export async function getMoviesByEra(eraKey: TMDBEraKey, page = 1): Promise<TMDBCatalogResult> {
+  const era = ERA_RANGES.find((item) => item.key === eraKey);
+  if (!era) return { items: [], totalResults: 0, totalPages: 1 };
+
+  try {
+    const data = await tmdbFetch('/discover/movie', {
+      'primary_release_date.gte': era.from,
+      'primary_release_date.lte': era.to,
+      sort_by: 'vote_average.desc',
+      'vote_count.gte': '1000',
+      page: String(page),
+    });
+    return {
+      items: mapDiscoverResults(data, 'movie'),
+      totalResults: data.total_results || 0,
+      totalPages: data.total_pages || 1,
+    };
+  } catch {
+    return { items: [], totalResults: 0, totalPages: 1 };
+  }
+}
 
 export async function getEraRows(): Promise<TMDBEraRow[]> {
   const rows = await Promise.all(
@@ -827,6 +851,7 @@ export interface TMDBCatalogItem {
   title: string;
   overview: string;
   poster_path: string;
+  backdrop_path?: string;
   vote_average: number;
   release_date: string;
   mediaType: 'movie' | 'tv';
@@ -838,6 +863,7 @@ function toCatalogItem(m: any, mediaType: 'movie' | 'tv'): TMDBCatalogItem {
     title: (mediaType === 'movie' ? m.title || m.original_title : m.name || m.original_name) || '',
     overview: m.overview || '',
     poster_path: m.poster_path,
+    backdrop_path: m.backdrop_path || undefined,
     vote_average: m.vote_average || 0,
     release_date: (mediaType === 'movie' ? m.release_date : m.first_air_date) || '',
     mediaType,
@@ -947,13 +973,19 @@ export async function searchMoviesByCompany(
 
 // Genre search is simpler than provider/company: TMDB's search results
 // already include genre_ids directly, so no per-title lookup call is needed.
-export async function searchMoviesByGenre(query: string, genreId: number): Promise<TMDBCatalogItem[]> {
+export async function searchMoviesByGenre(
+  query: string,
+  genreId: number,
+  mediaType?: 'movie' | 'tv'
+): Promise<TMDBCatalogItem[]> {
   if (!query.trim()) return [];
   try {
     const { movie, tv } = await searchBothTypes(query);
+    const movies = mediaType === 'tv' ? [] : movie;
+    const shows = mediaType === 'movie' ? [] : tv;
     return [
-      ...movie.filter((m) => (m.genre_ids || []).includes(genreId)).map((m) => toCatalogItem(m, 'movie')),
-      ...tv.filter((m) => (m.genre_ids || []).includes(genreId)).map((m) => toCatalogItem(m, 'tv')),
+      ...movies.filter((m) => (m.genre_ids || []).includes(genreId)).map((m) => toCatalogItem(m, 'movie')),
+      ...shows.filter((m) => (m.genre_ids || []).includes(genreId)).map((m) => toCatalogItem(m, 'tv')),
     ];
   } catch {
     return [];
@@ -1000,10 +1032,13 @@ async function fetchDiscoverPages(
   }
 }
 
-async function fetchCatalogPages(extraParams: Record<string, string>): Promise<TMDBCatalogResult> {
+async function fetchCatalogPages(
+  extraParams: Record<string, string>,
+  page = 1
+): Promise<TMDBCatalogResult> {
   const [movies, shows] = await Promise.all([
-    fetchDiscoverPages('movie', extraParams),
-    fetchDiscoverPages('tv', extraParams),
+    fetchSingleDiscoverPage('movie', extraParams, page),
+    fetchSingleDiscoverPage('tv', extraParams, page),
   ]);
 
   const allItems = [...movies.items, ...shows.items];
@@ -1016,7 +1051,7 @@ async function fetchCatalogPages(extraParams: Record<string, string>): Promise<T
   return {
     items,
     totalResults: movies.totalResults + shows.totalResults,
-    totalPages: CATALOG_PAGES_TO_FETCH,
+    totalPages: Math.max(movies.totalPages, shows.totalPages),
   };
 }
 
@@ -1026,34 +1061,121 @@ export interface TMDBCatalogResult {
   totalPages: number;
 }
 
-export async function getMoviesByProvider(providerId: number): Promise<TMDBCatalogResult> {
-  return fetchCatalogPages({ with_watch_providers: String(providerId), watch_region: 'US' });
+async function fetchSingleDiscoverPage(
+  mediaType: 'movie' | 'tv',
+  extraParams: Record<string, string>,
+  page = 1
+): Promise<TMDBCatalogResult> {
+  try {
+    const data = await tmdbFetch(`/discover/${mediaType}`, {
+      ...extraParams,
+      sort_by: 'popularity.desc',
+      page: String(page),
+    });
+    return {
+      items: mapDiscoverResults(data, mediaType),
+      totalResults: data.total_results || 0,
+      totalPages: data.total_pages || 1,
+    };
+  } catch {
+    return { items: [], totalResults: 0, totalPages: 1 };
+  }
 }
 
-export async function getMoviesByCompany(companyId: number): Promise<TMDBCatalogResult> {
-  return fetchCatalogPages({ with_companies: String(companyId) });
+export async function getMoviesByProvider(providerId: number, page = 1): Promise<TMDBCatalogResult> {
+  return fetchCatalogPages({ with_watch_providers: String(providerId), watch_region: 'US' }, page);
 }
 
-export async function getMoviesByGenre(genreId: number): Promise<TMDBCatalogResult> {
-  return fetchCatalogPages({ with_genres: String(genreId) });
+export async function getMoviesByCompany(companyId: number, page = 1): Promise<TMDBCatalogResult> {
+  return fetchCatalogPages({ with_companies: String(companyId) }, page);
+}
+
+export async function getMoviesByGenre(genreId: number, page = 1): Promise<TMDBCatalogResult> {
+  return fetchCatalogPages({ with_genres: String(genreId) }, page);
+}
+
+export type TMDBCatalogCollection =
+  | 'trending-movies'
+  | 'trending-tv'
+  | 'popular-movies'
+  | 'popular-tv'
+  | 'upcoming-movies'
+  | 'now-playing-movies';
+
+const CATALOG_COLLECTIONS: Record<TMDBCatalogCollection, { endpoint: string; mediaType: 'movie' | 'tv' }> = {
+  'trending-movies': { endpoint: '/trending/movie/week', mediaType: 'movie' },
+  'trending-tv': { endpoint: '/trending/tv/week', mediaType: 'tv' },
+  'popular-movies': { endpoint: '/movie/popular', mediaType: 'movie' },
+  'popular-tv': { endpoint: '/tv/popular', mediaType: 'tv' },
+  'upcoming-movies': { endpoint: '/movie/upcoming', mediaType: 'movie' },
+  'now-playing-movies': { endpoint: '/movie/now_playing', mediaType: 'movie' },
+};
+
+export async function getCatalogCollection(
+  collection: TMDBCatalogCollection,
+  page = 1
+): Promise<TMDBCatalogResult> {
+  const { endpoint, mediaType } = CATALOG_COLLECTIONS[collection];
+  try {
+    const firstPage = await tmdbFetch(endpoint, { page: String(page) });
+    return {
+      items: mapDiscoverResults(firstPage, mediaType),
+      totalResults: firstPage.total_results || 0,
+      totalPages: firstPage.total_pages || 1,
+    };
+  } catch {
+    return { items: [], totalResults: 0, totalPages: 1 };
+  }
 }
 
 // Movie-only genre discovery. The general catalog function above combines
 // movie and TV results, but movie genre IDs are not valid TV genre filters.
-export async function getMovieOnlyByGenre(genreId: number): Promise<TMDBCatalogResult> {
-  const { items, totalResults } = await fetchDiscoverPages('movie', {
-    with_genres: String(genreId),
-  });
-  return { items, totalResults, totalPages: CATALOG_PAGES_TO_FETCH };
+export async function getMovieOnlyByGenre(genreId: number, page = 1): Promise<TMDBCatalogResult> {
+  return fetchSingleDiscoverPage('movie', { with_genres: String(genreId) }, page);
 }
 
 // TV uses a separate genre-id scheme from movies, so query only the TV
 // discover endpoint for series genre results.
-export async function getSeriesByGenre(genreId: number): Promise<TMDBCatalogResult> {
-  const { items, totalResults } = await fetchDiscoverPages('tv', {
-    with_genres: String(genreId),
-  });
-  return { items, totalResults, totalPages: CATALOG_PAGES_TO_FETCH };
+export async function getSeriesByGenre(genreId: number, page = 1): Promise<TMDBCatalogResult> {
+  return fetchSingleDiscoverPage('tv', { with_genres: String(genreId) }, page);
+}
+
+export type TMDBKidsCollection =
+  | 'all-movies'
+  | 'animated-movies'
+  | 'family-movies'
+  | 'all-series'
+  | 'animated-series'
+  | 'kids-series'
+  | 'family-series';
+
+export const KIDS_CATALOGS: Record<TMDBKidsCollection, { title: string; mediaType: 'movie' | 'tv'; genres: string }> = {
+  'all-movies': { title: 'All Kids Movies', mediaType: 'movie', genres: '16|10751' },
+  'animated-movies': { title: 'Animated Movies', mediaType: 'movie', genres: '16' },
+  'family-movies': { title: 'Family Movies', mediaType: 'movie', genres: '10751' },
+  'all-series': { title: 'All Kids Shows', mediaType: 'tv', genres: '16|10751|10762|10759' },
+  'animated-series': { title: 'Animated Series', mediaType: 'tv', genres: '16' },
+  'kids-series': { title: 'Kids TV Shows', mediaType: 'tv', genres: '10762' },
+  'family-series': { title: 'Family Series', mediaType: 'tv', genres: '10751' },
+};
+
+export async function getKidsCatalog(
+  collection: TMDBKidsCollection,
+  page = 1
+): Promise<TMDBCatalogResult> {
+  const catalog = KIDS_CATALOGS[collection];
+  const ratingLimit = catalog.mediaType === 'movie' ? 'PG' : 'TV-PG';
+
+  return fetchSingleDiscoverPage(
+    catalog.mediaType,
+    {
+      with_genres: catalog.genres,
+      include_adult: 'false',
+      certification_country: 'US',
+      'certification.lte': ratingLimit,
+    },
+    page
+  );
 }
 
 export interface TMDBGenreTile {

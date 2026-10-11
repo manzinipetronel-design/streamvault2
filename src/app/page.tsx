@@ -3,6 +3,8 @@ import MovieRow from '@/components/MovieRow';
 import HeroSpotlight from '@/components/HeroSpotlight';
 import TopSearchBar from '@/components/TopSearchBar';
 import RecentWatchedRow from '@/components/RecentWatchedRow';
+import KidsCatalog from '@/components/KidsCatalog';
+import { getIsKidsProfile } from '@/lib/profileAccess';
 
 const mockHero = {
   id: 1,
@@ -100,11 +102,15 @@ async function fetchGenreMovies(genreId?: number, endpoint?: string) {
 }
 
 export default async function HomePage() {
+  const isKidsMode = await getIsKidsProfile();
+  if (isKidsMode) return <KidsCatalog page="home" />;
+
   let trending: any[] = [];
   let action: any[] = [];
   let scifi: any[] = [];
   let comedy: any[] = [];
   let trendingTV: any[] = [];
+
   try {
     [trending, action, scifi, comedy, trendingTV] = await Promise.all([
       fetchGenreMovies(undefined, '/trending/movie/week'),
@@ -151,32 +157,32 @@ export default async function HomePage() {
           items={trendingItems}
           isMock={trendingItems === mockMovies}
           showRank={true}
-          viewAllHref="/new"
+          viewAllHref="/browse/catalog?collection=trending-movies&name=Trending%20now"
         />
         <MovieRow
           title="Popular series"
           items={trendingTVItems}
           isMock={trendingTVItems.length > 0 && trendingTVItems[0].id > 400 && trendingTVItems[0].id < 510}
           mediaType="tv"
-          viewAllHref="/series"
+          viewAllHref="/browse/catalog?collection=trending-tv&name=Popular%20series"
         />
         <MovieRow
           title="Mind-bending sci-fi"
           items={scifiItems}
           isMock={scifiItems.length > 0 && scifiItems[0].id > 200 && scifiItems[0].id < 310}
-          viewAllHref="/browse/catalog?genre=878&name=Mind-bending%20sci-fi"
+          viewAllHref="/browse/catalog?genre=878&type=movie&name=Mind-bending%20sci-fi"
         />
         <MovieRow
           title="Blockbuster action"
           items={actionItems}
           isMock={actionItems.length > 0 && actionItems[0].id > 100 && actionItems[0].id < 210}
-          viewAllHref="/browse/catalog?genre=28&name=Blockbuster%20action"
+          viewAllHref="/browse/catalog?genre=28&type=movie&name=Blockbuster%20action"
         />
         <MovieRow
           title="Top-rated comedies"
           items={comedyItems}
           isMock={comedyItems.length > 0 && comedyItems[0].id > 300 && comedyItems[0].id < 410}
-          viewAllHref="/browse/catalog?genre=35&name=Top-rated%20comedies"
+          viewAllHref="/browse/catalog?genre=35&type=movie&name=Top-rated%20comedies"
         />
       </div>
     </div>
