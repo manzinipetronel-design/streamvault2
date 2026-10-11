@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
-  LayoutGrid,
   Home,
   Camera,
   Tv,
@@ -11,6 +10,65 @@ import {
   Star,
   Layers,
 } from "lucide-react";
+
+type MobileIconName = "home" | "movies" | "series" | "browse" | "list";
+
+interface MobileItem {
+  name: string;
+  href: string;
+  icon: MobileIconName;
+  isActive: (pathname: string) => boolean;
+}
+
+function MobileIcon({ name }: { name: MobileIconName }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: "h-[21px] w-[21px] flex-none",
+    "aria-hidden": true as const,
+  };
+  switch (name) {
+    case "home":
+      return (
+        <svg {...common}>
+          <path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" />
+        </svg>
+      );
+    case "movies":
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="18" height="14" rx="2" />
+          <path d="M3 10h18M8 6l-3-3M14 6l-3-3" />
+        </svg>
+      );
+    case "series":
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="12" rx="2" />
+          <path d="M8 21h8M12 17v4" />
+        </svg>
+      );
+    case "browse":
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+          <rect x="13" y="13" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case "list":
+      return (
+        <svg {...common}>
+          <path d="M6 4h12v17l-6-4-6 4z" />
+        </svg>
+      );
+  }
+}
 
 interface NavItem {
   name: string;
@@ -38,6 +96,39 @@ const NAV_ITEMS: NavItem[] = [
     href: "/lists?tab=watchlist",
     icon: Layers,
     match: { type: "lists-tab", tab: "watchlist" },
+  },
+];
+
+const MOBILE_ITEMS: MobileItem[] = [
+  { name: "Home", href: "/", icon: "home", isActive: (p) => p === "/" },
+  {
+    name: "Movies",
+    href: "/movies",
+    icon: "movies",
+    isActive: (pathname) =>
+      pathname.startsWith("/movies") || pathname.startsWith("/media/movie"),
+  },
+  {
+    name: "Series",
+    href: "/series",
+    icon: "series",
+    isActive: (pathname) =>
+      pathname.startsWith("/series") || pathname.startsWith("/media/tv"),
+  },
+  {
+    name: "Browse",
+    href: "/browse",
+    icon: "browse",
+    isActive: (pathname) =>
+      pathname.startsWith("/browse") ||
+      pathname.startsWith("/new") ||
+      pathname.startsWith("/search"),
+  },
+  {
+    name: "My List",
+    href: "/lists?tab=watchlist",
+    icon: "list",
+    isActive: (pathname) => pathname.startsWith("/lists"),
   },
 ];
 
@@ -137,115 +228,31 @@ export function Navigation() {
         </nav>
       </div>
 
-      {/* Mobile bottom bar */}
+      {/* Mobile floating glass bar */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] bg-void/85 backdrop-blur-2xl border-t border-white/10"
+        className="md:hidden fixed left-4 right-4 bottom-[calc(14px+env(safe-area-inset-bottom,0px))] z-50 flex h-[62px] items-center justify-between rounded-full border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] p-[7px] backdrop-blur-[28px] backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_14px_34px_rgba(0,0,0,0.55)]"
       >
-        {[
-          {
-            name: "Home",
-            href: "/",
-            icon: Home,
-            match: { type: "path" as const },
-          },
-          {
-            name: "Movies",
-            href: "/movies",
-            icon: Camera,
-            match: { type: "path" as const },
-          },
-          {
-            name: "Series",
-            href: "/series",
-            icon: Tv,
-            match: { type: "path" as const },
-          },
-          {
-            name: "New & Popular",
-            href: "/new",
-            icon: Award,
-            match: { type: "path" as const },
-          },
-          {
-            name: "Browse",
-            href: "/browse",
-            icon: LayoutGrid,
-            match: { type: "path" as const },
-          },
-          {
-            name: "Favorites",
-            href: "/lists?tab=favorites",
-            icon: Star,
-            match: { type: "lists-tab" as const, tab: "favorites" },
-          },
-          {
-            name: "My List",
-            href: "/lists?tab=watchlist",
-            icon: Layers,
-            match: { type: "lists-tab" as const, tab: "watchlist" },
-          },
-        ].map((item) => {
-          const Icon = item.icon;
-          const active = isItemActive(item as NavItem);
+        {MOBILE_ITEMS.map((item) => {
+          const active = item.isActive(pathname);
           return (
             <Link
-              key={item.href}
+              key={item.name}
               href={item.href}
-              aria-label={item.name === "New & Popular" ? item.name : undefined}
+              aria-label={item.name}
               aria-current={active ? "page" : undefined}
-              className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border py-1.5 text-[8px] font-medium transition-colors duration-200 ${
-                active
-                  ? "border-violet-400/20 bg-violet-500/10 text-white"
-                  : "border-transparent text-white/55 hover:text-white/85"
+              className={`flex h-12 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-full px-2 font-display text-[11px] font-semibold transition-all duration-[350ms] ease-[cubic-bezier(0.16,1,0.3,1)] outline-none focus-visible:ring-2 focus-visible:ring-cyan active:scale-95 ${
+                active ? "bg-foreground px-3 text-void" : "text-white/60"
               }`}
             >
-              {active && (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-0.5 h-0.5 w-5 rounded-full bg-violet-400"
-                />
-              )}
-              {item.name === "Home" ? (
-                <img
-                  src="/assets/icons/home-house.png"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : item.name === "Movies" ? (
-                <img
-                  src="/assets/icons/movies-popcorn.png"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : item.name === "Series" ? (
-                <img
-                  src="/assets/icons/series-screen-play.svg"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : item.name === "My List" ? (
-                <img
-                  src="/assets/icons/my-list-bullets.svg"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : item.name === "Favorites" ? (
-                <img
-                  src="/assets/icons/favorites-heart-star.svg"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : item.name === "New & Popular" ? (
-                <img
-                  src="/assets/icons/new-popular-flame.svg"
-                  alt=""
-                  className="h-[22px] w-[22px] object-contain brightness-0 invert"
-                />
-              ) : (
-                <Icon className="w-[19px] h-[19px]" />
-              )}
-              {item.name === "New & Popular" ? "New" : item.name}
+              <MobileIcon name={item.icon} />
+              <span
+                className={`transition-all duration-[350ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  active ? "max-w-[70px] opacity-100" : "max-w-0 opacity-0"
+                }`}
+              >
+                {item.name}
+              </span>
             </Link>
           );
         })}

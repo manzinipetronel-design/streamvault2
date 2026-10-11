@@ -21,6 +21,7 @@ const unbounded = Unbounded({
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export const metadata: Metadata = {
@@ -51,7 +52,7 @@ export default function RootLayout({
                 <ProfileSelectorModal />
                 {/* Full-bleed main: individual pages add safe-area padding around
                   content that would otherwise sit under the floating navigation. */}
-                <main className="pb-20 md:pb-0">
+                <main className="pb-28 md:pb-0">
                   {children}
                 </main>
                 <Footer />

@@ -977,8 +977,15 @@ export default function MediaDetailPage() {
   return (
     <div className="page-enter relative min-h-screen bg-void text-foreground overflow-x-hidden font-sans selection:bg-violet selection:text-white">
       {/* ── Immersive Multi-stop Gradient Backdrop ── */}
+      {/* Mobile: portrait poster art as the backdrop */}
       <div
-        className="absolute top-0 left-0 right-0 h-[85vh] z-0 bg-cover bg-[center_28%] pointer-events-none"
+        className="md:hidden absolute top-0 left-0 right-0 h-[78svh] z-0 bg-cover bg-[center_top] pointer-events-none"
+        style={{
+          backgroundImage: `linear-gradient(180deg, rgba(13,13,13,0.35) 0%, rgba(13,13,13,0.05) 30%, rgba(13,13,13,0.75) 62%, #0D0D0D 100%), url('${detail.img}')`,
+        }}
+      />
+      <div
+        className="hidden md:block absolute top-0 left-0 right-0 h-[85vh] z-0 bg-cover bg-[center_28%] pointer-events-none"
         style={{
           backgroundImage: `linear-gradient(180deg, rgba(13,13,13,0.05) 0%, rgba(13,13,13,0.5) 50%, #0D0D0D 100%), linear-gradient(90deg, rgba(13,13,13,0.9) 0%, rgba(13,13,13,0.25) 40%, transparent 65%), url('${backdropImageSrc}')`,
         }}
@@ -988,7 +995,7 @@ export default function MediaDetailPage() {
       <button
         onClick={() => router.back()}
         aria-label="Back"
-        className="absolute top-7 left-7 z-20 inline-flex items-center gap-2 px-4 py-2.5 bg-[#111111]/50 hover:bg-[#111111]/80 backdrop-blur-[10px] border border-glass-border hover:border-violet rounded-[10px] text-[13.5px] font-semibold text-foreground transition-all duration-200 cursor-pointer"
+        className="absolute top-[calc(14px+env(safe-area-inset-top,0px))] left-5 md:top-7 md:left-7 z-20 inline-flex items-center justify-center gap-2 h-10 w-10 md:h-auto md:w-auto md:px-4 md:py-2.5 bg-[#111111]/50 hover:bg-[#111111]/80 backdrop-blur-[10px] border border-glass-border hover:border-violet rounded-full md:rounded-[10px] text-[13.5px] font-semibold text-foreground transition-all duration-200 cursor-pointer"
       >
         <svg
           viewBox="0 0 24 24"
@@ -999,7 +1006,7 @@ export default function MediaDetailPage() {
         >
           <path d="M15 18l-6-6 6-6" />
         </svg>
-        Back
+        <span className="hidden md:inline">Back</span>
       </button>
 
       {/* ── Credits Block — Top Right, Apple-style Placement ── */}
@@ -1037,10 +1044,10 @@ export default function MediaDetailPage() {
 
       {/* ── Main Hero Content Layout ── */}
       <div className="relative z-10 max-w-[1140px] mx-auto px-6 md:px-10 pb-20">
-        <div className="min-h-[85vh] flex flex-col justify-end pb-20 md:pb-28">
-          <div className="flex flex-col md:flex-row gap-8 md:gap-[38px] items-start md:items-end w-full pt-28 md:pt-0">
+        <div className="min-h-[74svh] md:min-h-[85vh] flex flex-col justify-end pb-12 md:pb-28">
+          <div className="flex flex-col md:flex-row gap-8 md:gap-[38px] items-start md:items-end w-full pt-24 md:pt-0">
             {/* Poster */}
-            <div className="flex-none w-[130px] sm:w-[150px] md:w-[180px] aspect-[2/3] rounded-[14px] overflow-hidden shadow-[0_24px_56px_rgba(0,0,0,0.6)] border border-white/[0.08] relative bg-void-2">
+            <div className="hidden md:block flex-none md:w-[180px] aspect-[2/3] rounded-[14px] overflow-hidden shadow-[0_24px_56px_rgba(0,0,0,0.6)] border border-white/[0.08] relative bg-void-2">
               <AppImage
                 src={detail.img}
                 alt={detail.alt || detail.title}
@@ -1072,7 +1079,7 @@ export default function MediaDetailPage() {
 
               {/* Big, gradient-filled display title — the signature StreamVault flourish */}
               <h1
-                className="font-display text-[38px] sm:text-[52px] md:text-[68px] font-extrabold tracking-[-0.02em] leading-[0.98] mb-[18px]"
+                className="font-display text-[34px] sm:text-[52px] md:text-[68px] font-extrabold tracking-[-0.02em] leading-[0.98] mb-[18px]"
                 style={{
                   background:
                     'linear-gradient(90deg, #ffffff 35%, var(--violet-light) 85%, var(--magenta) 110%)',
@@ -1133,7 +1140,7 @@ export default function MediaDetailPage() {
                       resumeProgressRef.current?.episode ?? lastWatched?.episode
                     )
                   }
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-black shadow-lg transition-all hover:bg-zinc-200 active:scale-95 sm:w-auto sm:px-6"
+                  className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full md:rounded-xl bg-white px-5 py-3 text-sm font-bold text-black shadow-lg transition-all hover:bg-zinc-200 active:scale-95 sm:w-auto sm:px-6"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   {showPlayer
@@ -1159,7 +1166,7 @@ export default function MediaDetailPage() {
                   <button
                     onClick={handleFavorite}
                     disabled={favLoading}
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                    className={`flex h-12 w-12 items-center justify-center rounded-full md:rounded-xl border transition-all cursor-pointer ${
                       isFavorite
                         ? 'bg-rose-500/20 border-rose-500 text-rose-500 shadow-lg shadow-rose-500/20'
                         : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
@@ -1174,7 +1181,7 @@ export default function MediaDetailPage() {
                   <button
                     onClick={handleWatchlist}
                     disabled={watchLoading}
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                    className={`flex h-12 w-12 items-center justify-center rounded-full md:rounded-xl border transition-all cursor-pointer ${
                       isInWatchlist
                         ? 'bg-violet-600/20 border-violet-500 text-violet-400 shadow-lg shadow-violet-600/20'
                         : 'bg-zinc-900/80 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
@@ -1204,7 +1211,7 @@ export default function MediaDetailPage() {
                   setActiveSourceIndex(0);
                   setLoadError(false);
                 }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] border border-glass-border text-muted hover:text-foreground transition-all duration-200 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 md:px-3.5 md:py-1.5 rounded-lg text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] border border-glass-border text-muted hover:text-foreground transition-all duration-200 cursor-pointer"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -1222,7 +1229,7 @@ export default function MediaDetailPage() {
                 <button
                   key={src.name}
                   onClick={() => handleSourceChange(i)}
-                  className={`px-3.5 py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer ${
+                  className={`px-4 py-2.5 md:px-3.5 md:py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer ${
                     activeSourceIndex === i
                       ? 'bg-foreground text-void'
                       : 'bg-void-2 hover:bg-void-3 border border-glass-border text-muted hover:text-foreground'
@@ -1467,7 +1474,7 @@ export default function MediaDetailPage() {
                 />
                 <div
                   ref={episodesRowRef}
-                  className="spotlight-scope flex gap-6 overflow-x-auto pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="spotlight-scope flex gap-3 md:gap-6 overflow-x-auto pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 >
                 {episodes.map((ep) => (
                   <button
@@ -1543,7 +1550,7 @@ export default function MediaDetailPage() {
                 />
                 <div
                   ref={trailersRowRef}
-                  className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="spotlight-scope flex gap-3 md:gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 >
                 {trailers.map((t) => (
                   <button
@@ -1599,7 +1606,7 @@ export default function MediaDetailPage() {
               />
               <div
                 ref={relatedRowRef}
-                className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="spotlight-scope flex gap-3 md:gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               >
               {related.map((r) => (
                 <Link
@@ -1651,7 +1658,7 @@ export default function MediaDetailPage() {
               />
               <div
                 ref={castRowRef}
-                className="spotlight-scope flex gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                className="spotlight-scope flex gap-3 md:gap-6 overflow-x-auto sv-bleed-row pb-3 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               >
               {fullCredits.map((c) => (
                 <Link

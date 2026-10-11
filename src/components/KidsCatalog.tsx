@@ -36,7 +36,7 @@ function KidsCategoryTiles({
   }[];
 }) {
   return (
-    <div className="flex h-[300px] gap-1.5 overflow-hidden rounded-2xl md:h-[420px]">
+    <div className="grid grid-cols-2 gap-3 md:flex md:h-[420px] md:gap-1.5 md:overflow-hidden md:rounded-2xl">
       {catalogs.map(({ collection, result }) => {
         const { title } = KIDS_CATALOGS[collection];
         const posters = result.items
@@ -48,7 +48,7 @@ function KidsCategoryTiles({
           <Link
             key={collection}
             href={kidsCatalogHref(collection)}
-            className="group relative flex min-w-16 flex-1 items-end overflow-hidden rounded-2xl bg-void-2 p-5 transition-[flex-grow] duration-500 ease-out hover:flex-[5]"
+            className="group relative flex min-h-[150px] min-w-0 items-end overflow-hidden rounded-2xl bg-void-2 p-4 transition-[flex-grow] duration-500 ease-out md:min-h-0 md:min-w-16 md:flex-1 md:p-5 md:hover:flex-[5]"
           >
             <div className="absolute inset-0 flex">
               {posters.map((posterPath, index) => (
@@ -66,10 +66,10 @@ function KidsCategoryTiles({
               ))}
             </div>
             <div className="absolute inset-0 bg-gradient-to-t from-void via-void/20 to-transparent" />
-            <span className="relative font-display text-[15px] font-semibold text-foreground [writing-mode:vertical-rl] rotate-180 transition-opacity duration-300 group-hover:opacity-0">
+            <span className="relative hidden font-display text-[15px] font-semibold text-foreground [writing-mode:vertical-rl] rotate-180 transition-opacity duration-300 md:inline md:group-hover:opacity-0">
               {title}
             </span>
-            <span className="absolute bottom-5 left-5 max-w-[220px] translate-y-1.5 font-display text-2xl font-extrabold leading-tight opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+            <span className="absolute bottom-4 left-4 right-4 font-display text-lg font-extrabold leading-tight opacity-100 transition-all duration-300 md:bottom-5 md:left-5 md:right-auto md:max-w-[220px] md:translate-y-1.5 md:text-2xl md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100">
               {title}
             </span>
           </Link>

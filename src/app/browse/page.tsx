@@ -110,7 +110,7 @@ function MoodPanel({ tile }: { tile: TMDBGenreTile }) {
   return (
     <Link
       href={`/browse/catalog?genre=${tile.id}&type=movie&name=${encodeURIComponent(tile.name)}`}
-      className="group relative flex-1 min-w-16 rounded-2xl overflow-hidden transition-[flex-grow] duration-500 ease-out hover:flex-[5] bg-void-2"
+      className="group relative min-h-[150px] min-w-0 overflow-hidden rounded-2xl bg-void-2 transition-[flex-grow] duration-500 ease-out md:min-h-0 md:min-w-16 md:flex-1 md:hover:flex-[5]"
     >
       {/* poster collage background — quiet/grayscale at rest, revealed on hover */}
       <div className="absolute inset-0 flex">
@@ -126,13 +126,13 @@ function MoodPanel({ tile }: { tile: TMDBGenreTile }) {
 
       <div className="relative h-full flex items-end p-5">
         {/* collapsed: vertical spine label */}
-        <span className="font-display font-semibold text-[15px] text-foreground whitespace-nowrap [writing-mode:vertical-rl] rotate-180 group-hover:opacity-0 group-hover:absolute transition-opacity duration-300">
+        <span className="hidden font-display font-semibold text-[15px] text-foreground whitespace-nowrap [writing-mode:vertical-rl] rotate-180 transition-opacity duration-300 md:inline md:group-hover:opacity-0 md:group-hover:absolute">
           {tile.name}
         </span>
 
         {/* expanded: full title + count + blurb */}
-        <div className="max-w-[220px] opacity-0 translate-y-1.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 delay-100">
-          <div className="font-display font-extrabold text-2xl leading-tight mb-1.5">
+        <div className="max-w-none translate-y-0 opacity-100 transition-all duration-300 delay-100 md:max-w-[220px] md:translate-y-1.5 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100">
+          <div className="mb-1.5 font-display text-xl font-extrabold leading-tight md:text-2xl">
             {tile.name}
           </div>
           {tile.totalResults > 0 && (
@@ -178,9 +178,35 @@ export default async function BrowsePage() {
           <HeaderAvatar />
         </div>
 
+        {/* Mobile shortcuts — these two used to live in the bottom bar */}
+        <div className="md:hidden -mt-4 mb-8 flex gap-2.5">
+          <Link
+            href="/new"
+            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] font-display text-[12px] font-semibold text-foreground backdrop-blur-xl transition-transform active:scale-95"
+          >
+            <img
+              src="/assets/icons/new-popular-flame.svg"
+              alt=""
+              className="h-[18px] w-[18px] object-contain brightness-0 invert"
+            />
+            New &amp; Popular
+          </Link>
+          <Link
+            href="/lists?tab=favorites"
+            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] font-display text-[12px] font-semibold text-foreground backdrop-blur-xl transition-transform active:scale-95"
+          >
+            <img
+              src="/assets/icons/favorites-heart-star.svg"
+              alt=""
+              className="h-[18px] w-[18px] object-contain brightness-0 invert"
+            />
+            Favorites
+          </Link>
+        </div>
+
         {/* Mood rail */}
         <div className="text-[13px] text-muted mb-3.5">Pick a mood</div>
-        <div className="flex h-[420px] gap-1.5 rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-2 gap-3 md:flex md:h-[420px] md:gap-1.5 md:overflow-hidden md:rounded-2xl">
           {genres.map((g) => (
             <MoodPanel key={g.id} tile={g} />
           ))}

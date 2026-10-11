@@ -169,7 +169,7 @@ export default function HeroSpotlight({
   const strip = items.slice(0, 6);
 
   return (
-    <section className={`relative min-h-[min(700px,82svh)] overflow-hidden bg-void md:min-h-[640px] ${className}`}>
+    <section className={`relative min-h-[min(600px,72svh)] overflow-hidden bg-void md:min-h-[640px] ${className}`}>
       {/* Backdrop */}
       <div className="absolute inset-0 z-0">
         <AnimatePresence>
@@ -209,10 +209,10 @@ export default function HeroSpotlight({
         </AnimatePresence>
         {/* Text-legibility fade — clear well before the right edge so the
           rest of the backdrop stays vivid instead of carrying a faint wash. */}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(13,13,13,0.95)_0%,rgba(13,13,13,0.55)_50%,rgba(13,13,13,0.15)_78%,transparent_100%)] md:bg-[linear-gradient(90deg,rgba(13,13,13,0.96)_0%,rgba(13,13,13,0.55)_24%,rgba(13,13,13,0.15)_40%,transparent_58%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(13,13,13,0.65)_0%,rgba(13,13,13,0.35)_50%,rgba(13,13,13,0.05)_80%,transparent_100%)] md:bg-[linear-gradient(90deg,rgba(13,13,13,0.96)_0%,rgba(13,13,13,0.55)_24%,rgba(13,13,13,0.15)_40%,transparent_58%)]" />
         {/* Footer-legibility fade — dark behind the poster strip and buttons,
           then clear well above them. */}
-        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(13,13,13,0.9)_0%,rgba(13,13,13,0.4)_16%,rgba(13,13,13,0.1)_32%,transparent_46%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(13,13,13,0.72)_0%,rgba(13,13,13,0.3)_16%,rgba(13,13,13,0.08)_32%,transparent_46%)] md:bg-[linear-gradient(0deg,rgba(13,13,13,0.9)_0%,rgba(13,13,13,0.4)_16%,rgba(13,13,13,0.1)_32%,transparent_46%)]" />
       </div>
 
       {/* Foreground: a column, not vertical-centering-over-the-whole-section.
@@ -221,7 +221,7 @@ export default function HeroSpotlight({
           natural height below it in normal flow. That way the two can
           never overlap on a short viewport — they just compress toward
           each other instead of the footer punching through the buttons. */}
-      <div className="relative z-20 min-h-[82svh] flex flex-col md:min-h-[92vh]">
+      <div className="relative z-20 min-h-[72svh] flex flex-col md:min-h-[92vh]">
         <div className="flex-1 flex flex-col justify-center pl-5 pr-5 md:pl-28 md:pr-12 pt-20 pb-3 md:pt-24 md:pb-6">
           <AnimatePresence mode="wait">
             <motion.div

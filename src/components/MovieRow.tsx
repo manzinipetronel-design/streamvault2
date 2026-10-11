@@ -102,7 +102,7 @@ export default function MovieRow({
         <button
           onClick={() => scrollRow(-1)}
           aria-label="Scroll left"
-          className="absolute top-1/2 -translate-y-1/2 -left-2 w-9 h-9 rounded-full bg-void-2/70 backdrop-blur-md border border-glass-border flex items-center justify-center text-foreground opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 hover:border-violet z-10"
+          className="absolute top-1/2 -translate-y-1/2 -left-2 hidden h-9 w-9 items-center justify-center rounded-full border border-glass-border bg-void-2/70 text-foreground opacity-0 backdrop-blur-md transition-opacity duration-200 hover:border-violet group-hover/row:opacity-100 md:flex z-10"
         >
           <svg
             viewBox="0 0 24 24"
@@ -117,7 +117,7 @@ export default function MovieRow({
 
         <div
           ref={rowRef}
-          className="movie-row spotlight-scope flex gap-[14px] overflow-x-auto pb-1 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className="movie-row spotlight-scope flex gap-3 md:gap-[14px] overflow-x-auto pb-1 scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {visibleItems.map((movie, i) => {
             const releaseYear = (movie.release_date || movie.first_air_date || '2026').split(
@@ -130,12 +130,12 @@ export default function MovieRow({
             return (
               <div
                 key={movie.id}
-                className="group/card relative flex-none w-[125px] snap-start sm:w-[150px] md:w-[172px]"
+                className="group/card relative flex-none w-[clamp(112px,31vw,150px)] snap-start md:w-[172px]"
               >
                 <Link
                   href={`/media/${mediaType}/${movie.id}`}
                   prefetch={false}
-                  className="movie-card group block relative rounded-[8px]"
+                  className="movie-card group block relative rounded-[8px] transition-transform duration-200 active:scale-[0.96] md:active:scale-100"
                 >
                 {/* Same hover as the media page: the poster zooms slightly and a
                     soft gradient fades in with the details. No lift, no ring,
@@ -207,7 +207,7 @@ export default function MovieRow({
         <button
           onClick={() => scrollRow(1)}
           aria-label="Scroll right"
-          className="absolute top-1/2 -translate-y-1/2 -right-2 w-9 h-9 rounded-full bg-void-2/70 backdrop-blur-md border border-glass-border flex items-center justify-center text-foreground opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 hover:border-violet z-10"
+          className="absolute top-1/2 -translate-y-1/2 -right-2 hidden h-9 w-9 items-center justify-center rounded-full border border-glass-border bg-void-2/70 text-foreground opacity-0 backdrop-blur-md transition-opacity duration-200 hover:border-violet group-hover/row:opacity-100 md:flex z-10"
         >
           <svg
             viewBox="0 0 24 24"
