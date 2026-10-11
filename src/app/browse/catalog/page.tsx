@@ -38,7 +38,7 @@ export default async function CatalogPage({ searchParams }: PageProps) {
     | TMDBKidsCollection
     | undefined;
   if (isKidsMode && !kidsCollection) {
-    redirect('/browse/catalog?kids=all-movies');
+    redirect('/browse/catalog?kids=family-movie-favorites');
   }
 
   const providerId = provider ? Number(provider) : null;

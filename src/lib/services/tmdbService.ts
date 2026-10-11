@@ -1069,7 +1069,7 @@ async function fetchSingleDiscoverPage(
   try {
     const data = await tmdbFetch(`/discover/${mediaType}`, {
       ...extraParams,
-      sort_by: 'popularity.desc',
+      sort_by: extraParams.sort_by || 'popularity.desc',
       page: String(page),
     });
     return {
@@ -1141,34 +1141,95 @@ export async function getSeriesByGenre(genreId: number, page = 1): Promise<TMDBC
 }
 
 export type TMDBKidsCollection =
-  | 'all-movies'
-  | 'animated-movies'
-  | 'family-movies'
-  | 'all-series'
-  | 'animated-series'
-  | 'kids-series'
-  | 'family-series';
+  | 'family-movie-favorites'
+  | 'nickelodeon-series'
+  | 'cartoon-network-series'
+  | 'disney-channel-series';
 
-export const KIDS_CATALOGS: Record<TMDBKidsCollection, { title: string; mediaType: 'movie' | 'tv'; genres: string }> = {
-  'all-movies': { title: 'All Kids Movies', mediaType: 'movie', genres: '16|10751' },
-  'animated-movies': { title: 'Animated Movies', mediaType: 'movie', genres: '16' },
-  'family-movies': { title: 'Family Movies', mediaType: 'movie', genres: '10751' },
-  'all-series': { title: 'All Kids Shows', mediaType: 'tv', genres: '16|10751|10762|10759' },
-  'animated-series': { title: 'Animated Series', mediaType: 'tv', genres: '16' },
-  'kids-series': { title: 'Kids TV Shows', mediaType: 'tv', genres: '10762' },
-  'family-series': { title: 'Family Series', mediaType: 'tv', genres: '10751' },
+type KidsCatalogDefinition = {
+  title: string;
+  mediaType: 'movie' | 'tv';
+  genres: string;
+  featuredIds?: number[];
+  filters?: Record<string, string>;
 };
+
+export const KIDS_CATALOGS: Record<TMDBKidsCollection, KidsCatalogDefinition> = {
+  'family-movie-favorites': {
+    title: 'Top-Rated Family Movies',
+    mediaType: 'movie',
+    genres: '16|10751',
+    featuredIds: [
+      862, 12, 808, 9806, 150540, 137106, 277834, 109445, 269149, 354912,
+      585, 14160, 2062, 920, 20352, 10191, 82690, 38757, 116149, 10386,
+      227973, 501929, 568124, 502356, 9502,
+    ],
+  },
+  'nickelodeon-series': {
+    title: 'Nickelodeon Favorites',
+    mediaType: 'tv',
+    genres: '16|10762|10759',
+    filters: { with_networks: '13' },
+  },
+  'cartoon-network-series': {
+    title: 'Cartoon Network Favorites',
+    mediaType: 'tv',
+    genres: '16|10762|10759',
+    filters: { with_networks: '56' },
+  },
+  'disney-channel-series': {
+    title: 'Disney Channel Favorites',
+    mediaType: 'tv',
+    genres: '16|10762|10759',
+    filters: { with_networks: '54' },
+  },
+};
+
+const KIDS_ALLOWED_RATINGS = new Set(['G', 'PG']);
+const KIDS_TV_ALLOWED_RATINGS = new Set(['TV-Y', 'TV-Y7', 'TV-Y7-FV', 'TV-G', 'TV-PG']);
+
+async function getFeaturedKidsCatalog(
+  catalog: KidsCatalogDefinition
+): Promise<TMDBCatalogResult> {
+  const details = await Promise.all(
+    (catalog.featuredIds ?? []).map((id) => getMovieDetails(id))
+  );
+  const items = details.flatMap((detail) => {
+    if (!detail || !KIDS_ALLOWED_RATINGS.has(detail.certification?.trim().toUpperCase() ?? '')) {
+      return [];
+    }
+    const imagePath = (url: string) =>
+      url.match(/^https:\/\/image\.tmdb\.org\/t\/p\/[^/]+(\/.*)$/)?.[1] ?? url;
+    return [{
+      id: detail.id,
+      title: detail.title,
+      overview: detail.overview,
+      poster_path: imagePath(detail.img),
+      backdrop_path: imagePath(detail.backdropImg),
+      vote_average: Number.parseFloat(detail.rating) || 0,
+      release_date: detail.releaseDate,
+      mediaType: 'movie' as const,
+    }];
+  });
+
+  return { items, totalResults: items.length, totalPages: 1 };
+}
 
 export async function getKidsCatalog(
   collection: TMDBKidsCollection,
   page = 1
 ): Promise<TMDBCatalogResult> {
   const catalog = KIDS_CATALOGS[collection];
+  if (catalog.featuredIds) return page === 1
+    ? getFeaturedKidsCatalog(catalog)
+    : { items: [], totalResults: 0, totalPages: 1 };
+
   const ratingLimit = catalog.mediaType === 'movie' ? 'PG' : 'TV-PG';
 
-  return fetchSingleDiscoverPage(
+  const result = await fetchSingleDiscoverPage(
     catalog.mediaType,
     {
+      ...catalog.filters,
       with_genres: catalog.genres,
       include_adult: 'false',
       certification_country: 'US',
@@ -1176,6 +1237,18 @@ export async function getKidsCatalog(
     },
     page
   );
+  if (catalog.mediaType === 'tv') {
+    result.items = await Promise.all(
+      result.items.map(async (item) => {
+        const detail = await getTVDetails(item.id);
+        return detail?.certification &&
+          KIDS_TV_ALLOWED_RATINGS.has(detail.certification.trim().toUpperCase())
+          ? item
+          : null;
+      })
+    ).then((items) => items.filter((item): item is TMDBCatalogItem => item !== null));
+  }
+  return result;
 }
 
 export interface TMDBGenreTile {

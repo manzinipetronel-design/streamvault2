@@ -8,12 +8,11 @@ import { getKidsCatalog, KIDS_CATALOGS, type TMDBKidsCollection } from '@/lib/se
 
 type KidsCatalogPage = 'home' | 'browse' | 'movies' | 'series' | 'new';
 
-const MOVIE_COLLECTIONS: TMDBKidsCollection[] = ['all-movies', 'animated-movies', 'family-movies'];
+const MOVIE_COLLECTIONS: TMDBKidsCollection[] = ['family-movie-favorites'];
 const SERIES_COLLECTIONS: TMDBKidsCollection[] = [
-  'all-series',
-  'animated-series',
-  'kids-series',
-  'family-series',
+  'nickelodeon-series',
+  'cartoon-network-series',
+  'disney-channel-series',
 ];
 const ALL_COLLECTIONS = [...MOVIE_COLLECTIONS, ...SERIES_COLLECTIONS];
 
@@ -89,10 +88,8 @@ export default async function KidsCatalog({ page }: { page: KidsCatalogPage }) {
     }))
   );
 
-  const movieCatalog = catalogs.find(({ collection }) =>
-    page === 'series' ? collection === 'all-series' : collection === 'all-movies'
-  );
-  const seriesCatalog = catalogs.find(({ collection }) => collection === 'all-series');
+  const movieCatalog = catalogs.find(({ mediaType }) => mediaType === 'movie');
+  const seriesCatalog = catalogs.find(({ mediaType }) => mediaType === 'tv');
   const heroItems = [movieCatalog, seriesCatalog]
     .flatMap((catalog) => catalog?.result.items.slice(0, 3) ?? [])
     .map((item) => ({ ...item, mediaType: item.mediaType }));
